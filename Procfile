@@ -1,1 +1,1 @@
-web: gunicorn debug_app:app 
+web: gunicorn bridge:application 
