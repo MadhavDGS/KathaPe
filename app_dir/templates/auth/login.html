@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Force dark theme styles */
+    body, html {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    
+    .card {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333333 !important;
+        color: #ffffff !important;
+        margin-bottom: 20px;
+        padding: 20px;
+        border-radius: 8px;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .text-primary {
+        color: #2ecc71 !important;
+    }
+    
+    a {
+        color: #2ecc71 !important;
+    }
+    
+    .form-control {
+        background-color: #333 !important;
+        border-color: #444 !important;
+        color: #fff !important;
+    }
+    
+    .form-control:focus {
+        box-shadow: 0 0 0 0.2rem rgba(46, 204, 113, 0.25) !important;
+    }
+    
+    .form-label {
+        color: #fff !important;
+    }
+    
+    .form-text {
+        color: #aaa !important;
+    }
+    
+    .nav-tabs .nav-link {
+        color: #aaa !important;
+        background-color: transparent !important;
+        border-color: transparent !important;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: #2ecc71 !important;
+        background-color: #1e1e1e !important;
+        border-color: #333 #333 #1e1e1e !important;
+        border-bottom: 2px solid #2ecc71 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <h2 class="text-center mb-4">Login</h2>
+                
+                <ul class="nav nav-tabs mb-4" id="loginTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="phone-tab" data-bs-toggle="tab" data-bs-target="#phone-login" type="button" role="tab" aria-controls="phone-login" aria-selected="true">Phone Login</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="otp-tab" data-bs-toggle="tab" data-bs-target="#otp-login" type="button" role="tab" aria-controls="otp-login" aria-selected="false">OTP Login</button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content" id="loginTabsContent">
+                    <!-- Phone Number + Password Login -->
+                    <div class="tab-pane fade show active" id="phone-login" role="tabpanel" aria-labelledby="phone-tab">
+                        <form method="post" action="{{ url_for('auth.login') }}">
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" id="phone" name="phone" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="password" name="password" required>
+                                <div class="form-text text-end">
+                                    <a href="{{ url_for('auth.forgot_password') }}">Forgot Password?</a>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" name="login_type" value="phone_password">
+                            <input type="hidden" name="user_type" value="{{ request.args.get('user_type', 'business') }}">
+                            
+                            <div class="mb-3">
+                                <button type="submit" class="btn btn-primary w-100">Login</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- OTP Login -->
+                    <div class="tab-pane fade" id="otp-login" role="tabpanel" aria-labelledby="otp-tab">
+                        <form method="post" action="{{ url_for('auth.request_otp') }}" id="request-otp-form">
+                            <div class="mb-3">
+                                <label for="email_or_phone" class="form-label">Email or Phone Number</label>
+                                <input type="text" class="form-control" id="email_or_phone" name="email_or_phone" required>
+                            </div>
+                            
+                            <input type="hidden" name="user_type" value="{{ request.args.get('user_type', 'business') }}">
+                            
+                            <div class="mb-3">
+                                <button type="submit" class="btn btn-primary w-100">Request OTP</button>
+                            </div>
+                        </form>
+                        
+                        <form method="post" action="{{ url_for('auth.verify_otp') }}" id="verify-otp-form" style="display: none;">
+                            <div class="mb-3">
+                                <label for="otp" class="form-label">Enter OTP</label>
+                                <input type="text" class="form-control" id="otp" name="otp" required>
+                                <div class="form-text">
+                                    Please enter the OTP sent to your email/phone
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" name="email_or_phone" id="hidden_email_or_phone">
+                            <input type="hidden" name="user_type" value="{{ request.args.get('user_type', 'business') }}">
+                            
+                            <div class="mb-3">
+                                <button type="submit" class="btn btn-primary w-100">Verify OTP</button>
+                            </div>
+                            
+                            <div class="text-center">
+                                <a href="#" id="resend-otp">Resend OTP</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <p>Don't have an account? <a href="{{ url_for('auth.register', user_type=request.args.get('user_type', 'business')) }}">Register</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle OTP request form submission
+        const requestOtpForm = document.getElementById('request-otp-form');
+        const verifyOtpForm = document.getElementById('verify-otp-form');
+        const hiddenEmailOrPhone = document.getElementById('hidden_email_or_phone');
+        const resendOtpLink = document.getElementById('resend-otp');
+        
+        if (requestOtpForm) {
+            requestOtpForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const emailOrPhone = document.getElementById('email_or_phone').value;
+                hiddenEmailOrPhone.value = emailOrPhone;
+                
+                // Simulate OTP sending (in a real app, this would be an AJAX request)
+                alert('OTP sent to ' + emailOrPhone);
+                
+                // Hide request form and show verification form
+                requestOtpForm.style.display = 'none';
+                verifyOtpForm.style.display = 'block';
+            });
+        }
+        
+        if (resendOtpLink) {
+            resendOtpLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                // Resend OTP logic (in a real app, this would be an AJAX request)
+                alert('OTP resent to ' + hiddenEmailOrPhone.value);
+            });
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %} 

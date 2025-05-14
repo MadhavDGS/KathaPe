@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Dashboard{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/minimal-dark.css') }}">
+<style>
+    /* Force dark mode styles */
+    body, html {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    
+    .card {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333333 !important;
+        color: #ffffff !important;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .text-primary {
+        color: #2ecc71 !important;
+    }
+    
+    .text-muted {
+        color: #b3b3b3 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1>Customer Dashboard</h1>
+            <p class="text-muted">View your credits across all businesses</p>
+        </div>
+    </div>
+
+    <!-- Credits Summary -->
+    <div class="row mb-4">
+        <div class="col-12 col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Credits</h5>
+                    <h2 class="text-primary">₹ {{ total_credits|default('500') }}</h2>
+                    <p class="text-muted">Across {{ customers|length }} businesses</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Credits List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Your Credits</h5>
+                </div>
+                <div class="card-body">
+                    {% if customers %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Business</th>
+                                        <th>Credit Amount</th>
+                                        <th>Last Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for customer in customers %}
+                                    <tr>
+                                        <td>{{ customer.business_name }}</td>
+                                        <td class="text-primary">₹ {{ customer.credit_amount }}</td>
+                                        <td>{{ customer.last_updated }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <p>You don't have any credits yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
