@@ -23,73 +23,57 @@ os.environ.setdefault('DATABASE_URL', 'postgres://postgres.xhczvjwwmrvmcbwjxpxd:
 os.environ.setdefault('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
 os.environ.setdefault('UPLOAD_FOLDER', 'static/uploads')
 
-# Create folder structure early
+# Import necessary modules - let's not lazy load the essentials
+# This will slightly slow startup but prevent runtime errors
+import requests
+import qrcode
+import socket
+import threading
+from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Try to import and apply DNS patches for Supabase connectivity
+try:
+    import patches
+    patches.apply_patches()
+    print("Applied DNS resolution patches for Supabase")
+except ImportError:
+    print("DNS patches module not found, continuing without DNS patches")
+except Exception as e:
+    print(f"Error applying DNS patches: {str(e)}")
+
+# Import Supabase
+try:
+    from supabase import create_client, Client
+    print("Successfully imported Supabase module")
+except ImportError:
+    print("Supabase module not available, will use mock data only")
+
+# Import our mock authentication system
+import auth_bypass
+
+# Create folder structure
 upload_folder = os.getenv('UPLOAD_FOLDER', 'static/uploads')
 os.makedirs(upload_folder, exist_ok=True)
 qr_folder = 'static/qr_codes'
 os.makedirs(qr_folder, exist_ok=True)
 
-# Import our mock authentication system first - it's lightweight
-import auth_bypass
+# Retry settings for database connections
+DB_RETRY_ATTEMPTS = 3
+DB_RETRY_DELAY = 1  # seconds
+DB_QUERY_TIMEOUT = 5  # seconds
 
-# Defer heavy imports until actually needed - this dramatically speeds up startup
+# Supabase clients
 supabase_client = None
 supabase_admin_client = None
-threading_module = None
 
-# Lazy loading of heavy modules
-def get_heavy_modules():
-    global supabase_client, requests, qrcode, socket, patches, threading_module
-    
-    if 'requests' not in globals():
-        print("Lazy loading requests module...")
-        import requests
-        
-    if 'qrcode' not in globals():
-        print("Lazy loading qrcode module...")
-        import qrcode
-        
-    if 'socket' not in globals():
-        print("Lazy loading socket module...")
-        import socket
-        
-    if 'threading_module' not in globals() and 'threading' not in globals():
-        print("Lazy loading threading module...")
-        import threading as threading_module
-    
-    # Try to import and apply DNS patches
-    if 'patches' not in globals():
-        try:
-            print("Trying to load patches module...")
-            import patches
-            patches.apply_patches()
-            print("Applied DNS resolution patches for Supabase")
-        except ImportError:
-            print("DNS patches module not found, continuing without DNS patches")
-        except Exception as e:
-            print(f"Error applying DNS patches: {str(e)}")
-            
-    # Import Supabase only when needed
-    if 'supabase' not in globals():
-        try:
-            print("Lazy loading supabase module...")
-            from supabase import create_client, Client
-        except ImportError:
-            print("Supabase module not available")
-
-# Lazy loading of Supabase client
+# Supabase client function
 def get_supabase_client():
     global supabase_client
     
     # If we already have a client, return it
     if supabase_client:
         return supabase_client
-        
-    # Make sure required modules are loaded
-    get_heavy_modules()
-    
-    # Import in function scope to avoid startup delay
-    from supabase import create_client, Client
     
     supabase_url = os.getenv('SUPABASE_URL')
     supabase_key = os.getenv('SUPABASE_KEY')
@@ -99,17 +83,30 @@ def get_supabase_client():
         return None
     
     try:
-        # Create a new client with timeout
-        supabase_client = create_client(supabase_url, supabase_key, options={'timeout': 5})
-        # Test connection with a quick query
-        try:
-            supabase_client.table('users').select('id').limit(1).execute()
-            print("Successfully connected to Supabase")
-        except:
-            print("Failed to execute test query")
-            supabase_client = None
-            
-        return supabase_client
+        # Create a client with retry logic
+        for attempt in range(DB_RETRY_ATTEMPTS):
+            try:
+                # Create a new client with timeout
+                from supabase import create_client
+                supabase_client = create_client(supabase_url, supabase_key, options={'timeout': DB_QUERY_TIMEOUT})
+                
+                # Test connection with a quick query
+                try:
+                    supabase_client.table('users').select('id').limit(1).execute()
+                    print("Successfully connected to Supabase")
+                    return supabase_client
+                except Exception as test_error:
+                    print(f"Failed to execute test query: {str(test_error)}")
+                    if attempt < DB_RETRY_ATTEMPTS - 1:
+                        time.sleep(DB_RETRY_DELAY)
+                    else:
+                        raise
+            except Exception as e:
+                if attempt < DB_RETRY_ATTEMPTS - 1:
+                    print(f"Supabase connection attempt {attempt+1} failed: {str(e)}. Retrying...")
+                    time.sleep(DB_RETRY_DELAY)
+                else:
+                    raise
     except Exception as e:
         print(f"Failed to connect to Supabase: {str(e)}")
         print("Falling back to mock data system")
@@ -133,10 +130,10 @@ def timeout_query(func, *args, **kwargs):
     thread = threading.Thread(target=target)
     thread.daemon = True  # Daemon thread will not prevent app from exiting
     thread.start()
-    thread.join(timeout=5)
+    thread.join(timeout=DB_QUERY_TIMEOUT)
     
     if not completed[0]:
-        print(f"Database query timed out after 5 seconds")
+        print(f"Database query timed out after {DB_QUERY_TIMEOUT} seconds")
         return None
     if error[0]:
         print(f"Database query error: {str(error[0])}")
@@ -145,29 +142,37 @@ def timeout_query(func, *args, **kwargs):
 
 # Get a Supabase client with service role permissions
 def get_supabase_admin_client():
+    global supabase_admin_client
+    
+    # If we already have an admin client, return it
+    if supabase_admin_client:
+        return supabase_admin_client
+    
     supabase_url = os.getenv('SUPABASE_URL')
     supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
     
     if not supabase_url or not supabase_service_key:
-        raise Exception("Supabase URL and service key must be set in environment variables")
+        print("Supabase URL and service key must be set in environment variables")
+        return None
     
     try:
         # Add retry logic
-        for attempt in range(3):
+        for attempt in range(DB_RETRY_ATTEMPTS):
             try:
                 # Set shorter timeout
-                client = create_client(supabase_url, supabase_service_key, options={'timeout': 5})
+                from supabase import create_client
+                supabase_admin_client = create_client(supabase_url, supabase_service_key, options={'timeout': DB_QUERY_TIMEOUT})
                 # Test the connection
-                client.table('users').select('id').limit(1).execute()
-                return client
+                supabase_admin_client.table('users').select('id').limit(1).execute()
+                return supabase_admin_client
             except Exception as e:
-                if attempt < 2:
+                if attempt < DB_RETRY_ATTEMPTS - 1:
                     print(f"Supabase admin connection attempt {attempt+1} failed: {str(e)}. Retrying...")
-                    time.sleep(1)
+                    time.sleep(DB_RETRY_DELAY)
                 else:
                     raise
     except Exception as e:
-        print(f"Failed to connect to Supabase with admin privileges after 3 attempts: {str(e)}")
+        print(f"Failed to connect to Supabase with admin privileges after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
         print("Falling back to mock data system")
         return None
 
@@ -733,23 +738,7 @@ def login():
             flash('Please enter both phone number and password', 'error')
             return render_template('login.html')
         
-        # Quick mock login attempt first to avoid timeout
-        try:
-            success, mock_user = auth_bypass.mock_login(phone, password, user_type)
-            if success:
-                print(f"DEBUG: Mock authentication successful")
-                flash('Login successful!', 'success')
-                
-                # Session already set in mock_login
-                if user_type == 'business':
-                    return redirect(url_for('business_dashboard'))
-                else:
-                    return redirect(url_for('customer_dashboard'))
-        except Exception as mock_error:
-            print(f"DEBUG: Initial mock login failed: {str(mock_error)}")
-        
-        # Set sensible default values for the session
-        # This ensures the app can continue even if database operations fail
+        # Set sensible default values for the session in case DB operations fail
         user_id = str(uuid.uuid4())
         user_name = f"User {phone[-4:]}"
         
@@ -769,10 +758,13 @@ def login():
                 customer_id = str(uuid.uuid4())
                 session['customer_id'] = customer_id
             
-            # Use timeout-protected database operations
+            # First attempt Supabase authentication - prioritize this over mock
             def find_user():
-                # Try using the query_table helper function
-                return query_table('users', filters=[('phone_number', 'eq', phone)])
+                # Get client and query
+                client = get_supabase_client()
+                if not client:
+                    return None
+                return client.table('users').select('*').eq('phone_number', phone).execute()
             
             user_response = timeout_query(find_user)
             
@@ -785,17 +777,27 @@ def login():
                 
                 # Verify password - simplified for this implementation
                 if user.get('password') != password:
-                    # Wrong password but we'll let them proceed with limited functionality
-                    print(f"DEBUG: Password verification failed, using mock data")
-                    flash('Login successful with limited functionality', 'warning')
-                else:
-                    flash('Login successful!', 'success')
-                    
+                    flash('Invalid password', 'error')
+                    # Try mock login as a fallback
+                    success, mock_user = auth_bypass.mock_login(phone, password, user_type)
+                    if success:
+                        flash('Login successful with demo account', 'success')
+                        if user_type == 'business':
+                            return redirect(url_for('business_dashboard'))
+                        else:
+                            return redirect(url_for('customer_dashboard'))
+                    return render_template('login.html')
+                
+                flash('Login successful!', 'success')
+                
                 # Check user type and retrieve associated records
                 if user_type == 'business':
                     # Try to get business record
                     def get_business():
-                        return query_table('businesses', filters=[('user_id', 'eq', user_id)])
+                        client = get_supabase_client()
+                        if not client:
+                            return None
+                        return client.table('businesses').select('*').eq('user_id', user_id).execute()
                     
                     business_response = timeout_query(get_business)
                     
@@ -809,7 +811,10 @@ def login():
                 else:
                     # Try to get customer record
                     def get_customer():
-                        return query_table('customers', filters=[('user_id', 'eq', user_id)])
+                        client = get_supabase_client()
+                        if not client:
+                            return None
+                        return client.table('customers').select('*').eq('user_id', user_id).execute()
                     
                     customer_response = timeout_query(get_customer)
                     
@@ -819,23 +824,37 @@ def login():
                     
                     return redirect(url_for('customer_dashboard'))
             else:
-                print(f"DEBUG: No user found with phone number {phone}, using session defaults")
-                flash('Login successful with demo account', 'info')
-                if user_type == 'business':
-                    return redirect(url_for('business_dashboard'))
-                else:
-                    return redirect(url_for('customer_dashboard'))
+                print(f"DEBUG: No user found with phone number {phone} in Supabase")
+                
+                # Only now try mock login as a fallback
+                success, mock_user = auth_bypass.mock_login(phone, password, user_type)
+                if success:
+                    print(f"DEBUG: Mock authentication successful")
+                    flash('Login successful with demo account', 'info')
+                    if user_type == 'business':
+                        return redirect(url_for('business_dashboard'))
+                    else:
+                        return redirect(url_for('customer_dashboard'))
+                
+                flash('Invalid credentials', 'error')
+                return render_template('login.html')
                 
         except Exception as e:
             print(f"DEBUG: Login error: {str(e)}")
             traceback.print_exc()
             
-            # We already set session data with defaults, so redirect the user
-            flash('Login successful with limited functionality', 'info')
-            if user_type == 'business':
-                return redirect(url_for('business_dashboard'))
-            else:
-                return redirect(url_for('customer_dashboard'))
+            # Try mock login as a fallback
+            success, mock_user = auth_bypass.mock_login(phone, password, user_type)
+            if success:
+                print(f"DEBUG: Mock authentication successful after error")
+                flash('Login successful with demo account', 'warning')
+                if user_type == 'business':
+                    return redirect(url_for('business_dashboard'))
+                else:
+                    return redirect(url_for('customer_dashboard'))
+            
+            flash('Login failed. Please try again.', 'error')
+            return render_template('login.html')
     
     return render_template('login.html')
 
