@@ -18,15 +18,25 @@ from dotenv import load_dotenv
 try:
     # Import supabase with proper error handling
     from supabase import create_client, Client
-    from supabase.lib.client_options import ClientOptions  # Import ClientOptions
     print("Successfully imported Supabase module")
+    
+    # Check if we can import ClientOptions
+    try:
+        from supabase.lib.client_options import ClientOptions
+        HAS_CLIENT_OPTIONS = True
+    except ImportError:
+        HAS_CLIENT_OPTIONS = False
+        print("ClientOptions not available, using simple dict for options")
+    
     SUPABASE_AVAILABLE = True
 except ImportError as e:
     print(f"Supabase module not available, will use mock data only: {str(e)}")
     SUPABASE_AVAILABLE = False
+    HAS_CLIENT_OPTIONS = False
 except Exception as e:
     print(f"Error setting up Supabase: {str(e)}")
     SUPABASE_AVAILABLE = False
+    HAS_CLIENT_OPTIONS = False
 
 # Load environment variables
 load_dotenv()
@@ -78,10 +88,6 @@ supabase_admin_client = None
 
 # Define these globals explicitly to fix "name not defined" errors
 create_client = None
-ClientOptions = None
-if SUPABASE_AVAILABLE:
-    from supabase import create_client, Client
-    from supabase.lib.client_options import ClientOptions
 
 # Utility function to ensure valid UUIDs
 def safe_uuid(id_value):
@@ -97,9 +103,9 @@ def safe_uuid(id_value):
         print(f"WARNING: Invalid UUID '{id_value}' - generating new UUID")
         return str(uuid.uuid4())
 
-# Supabase client function with fixed initialization
+# Supabase client function with version-compatible options
 def get_supabase_client():
-    global supabase_client, create_client, ClientOptions
+    global supabase_client, create_client
     
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
@@ -122,18 +128,26 @@ def get_supabase_client():
         for attempt in range(DB_RETRY_ATTEMPTS):
             try:
                 # Import create_client if not already available
-                if not create_client or not ClientOptions:
+                if not create_client:
                     from supabase import create_client
-                    from supabase.lib.client_options import ClientOptions
                 
-                # Create options object properly with timeout
-                options = ClientOptions(
-                    schema="public",
-                    headers={},
-                    auto_refresh_token=True,
-                    persist_session=True,
-                    timeout=DB_QUERY_TIMEOUT
-                )
+                # Version-compatible options handling
+                if HAS_CLIENT_OPTIONS:
+                    try:
+                        from supabase.lib.client_options import ClientOptions
+                        # Try with ClientOptions but without timeout
+                        options = ClientOptions(
+                            schema="public",
+                            headers={},
+                            auto_refresh_token=True,
+                            persist_session=True
+                        )
+                    except Exception as e:
+                        print(f"Error creating ClientOptions: {str(e)}")
+                        options = {}  # Fallback to empty dict
+                else:
+                    # Simple dict for older versions
+                    options = {}
                 
                 # Create a new client with proper options
                 supabase_client = create_client(supabase_url, supabase_key, options=options)
@@ -160,9 +174,9 @@ def get_supabase_client():
         print("Falling back to mock data system")
         return None
 
-# Get a Supabase client with service role permissions with fixed initialization 
+# Get a Supabase client with service role permissions with version-compatible options
 def get_supabase_admin_client():
-    global supabase_admin_client, create_client, ClientOptions
+    global supabase_admin_client, create_client
     
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
@@ -185,18 +199,26 @@ def get_supabase_admin_client():
         for attempt in range(DB_RETRY_ATTEMPTS):
             try:
                 # Import create_client if not already available
-                if not create_client or not ClientOptions:
+                if not create_client:
                     from supabase import create_client
-                    from supabase.lib.client_options import ClientOptions
                 
-                # Create options object properly with timeout
-                options = ClientOptions(
-                    schema="public",
-                    headers={},
-                    auto_refresh_token=True,
-                    persist_session=True,
-                    timeout=DB_QUERY_TIMEOUT
-                )
+                # Version-compatible options handling
+                if HAS_CLIENT_OPTIONS:
+                    try:
+                        from supabase.lib.client_options import ClientOptions
+                        # Try with ClientOptions but without timeout
+                        options = ClientOptions(
+                            schema="public",
+                            headers={},
+                            auto_refresh_token=True,
+                            persist_session=True
+                        )
+                    except Exception as e:
+                        print(f"Error creating ClientOptions: {str(e)}")
+                        options = {}  # Fallback to empty dict
+                else:
+                    # Simple dict for older versions
+                    options = {}
                 
                 # Create admin client with proper options
                 supabase_admin_client = create_client(supabase_url, supabase_service_key, options=options)
