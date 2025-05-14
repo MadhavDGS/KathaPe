@@ -1,1 +1,1 @@
-web: gunicorn bridge:application 
+web: gunicorn app_bridge:application 
