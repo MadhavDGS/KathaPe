@@ -2,37 +2,20 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 import os
 import uuid
 import json
-import requests
-import qrcode
 import traceback
 import time
-import socket
-import threading
-from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
-from supabase import create_client, Client
 from dotenv import load_dotenv
-
-# Try to import and apply DNS patches for Supabase connectivity
-try:
-    import patches
-    patches.apply_patches()
-    print("Applied DNS resolution patches for Supabase")
-except ImportError:
-    print("DNS patches module not found, continuing without DNS patches")
-except Exception as e:
-    print(f"Error applying DNS patches: {str(e)}")
-
-# Import our mock authentication system
-import auth_bypass
 
 # Load environment variables
 load_dotenv()
 
+# Create Flask app first for faster startup
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
+
 # Environment variables - hardcoded for easy deployment
-# You should replace these with your actual values
 os.environ.setdefault('SUPABASE_URL', 'https://xhczvjwwmrvmcbwjxpxd.supabase.co')
 os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTM3MTQwNTgsImV4cCI6MjAyOTI5MDA1OH0.xnG-kIOiY4xbB3_QnTJtLXvwxU-fkW2RKlJw2WUoRE8') 
 os.environ.setdefault('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcxMzcxNDA1OCwiZXhwIjoyMDI5MjkwMDU4fQ.PjOwIuDIx5a_d3u4C7cFDuOQP8NaOXQKQzH2iSXnSEA')
@@ -40,43 +23,95 @@ os.environ.setdefault('DATABASE_URL', 'postgres://postgres.xhczvjwwmrvmcbwjxpxd:
 os.environ.setdefault('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
 os.environ.setdefault('UPLOAD_FOLDER', 'static/uploads')
 
-# Retry settings for database connections
-DB_RETRY_ATTEMPTS = 3
-DB_RETRY_DELAY = 1  # seconds
-DB_QUERY_TIMEOUT = 5  # seconds - shorter timeout to avoid worker timeouts
-
-app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')
-
-# Ensure upload folder exists
+# Create folder structure early
 upload_folder = os.getenv('UPLOAD_FOLDER', 'static/uploads')
 os.makedirs(upload_folder, exist_ok=True)
+qr_folder = 'static/qr_codes'
+os.makedirs(qr_folder, exist_ok=True)
 
-# Supabase client with timeout
+# Import our mock authentication system first - it's lightweight
+import auth_bypass
+
+# Defer heavy imports until actually needed - this dramatically speeds up startup
+supabase_client = None
+supabase_admin_client = None
+threading_module = None
+
+# Lazy loading of heavy modules
+def get_heavy_modules():
+    global supabase_client, requests, qrcode, socket, patches, threading_module
+    
+    if 'requests' not in globals():
+        print("Lazy loading requests module...")
+        import requests
+        
+    if 'qrcode' not in globals():
+        print("Lazy loading qrcode module...")
+        import qrcode
+        
+    if 'socket' not in globals():
+        print("Lazy loading socket module...")
+        import socket
+        
+    if 'threading_module' not in globals() and 'threading' not in globals():
+        print("Lazy loading threading module...")
+        import threading as threading_module
+    
+    # Try to import and apply DNS patches
+    if 'patches' not in globals():
+        try:
+            print("Trying to load patches module...")
+            import patches
+            patches.apply_patches()
+            print("Applied DNS resolution patches for Supabase")
+        except ImportError:
+            print("DNS patches module not found, continuing without DNS patches")
+        except Exception as e:
+            print(f"Error applying DNS patches: {str(e)}")
+            
+    # Import Supabase only when needed
+    if 'supabase' not in globals():
+        try:
+            print("Lazy loading supabase module...")
+            from supabase import create_client, Client
+        except ImportError:
+            print("Supabase module not available")
+
+# Lazy loading of Supabase client
 def get_supabase_client():
+    global supabase_client
+    
+    # If we already have a client, return it
+    if supabase_client:
+        return supabase_client
+        
+    # Make sure required modules are loaded
+    get_heavy_modules()
+    
+    # Import in function scope to avoid startup delay
+    from supabase import create_client, Client
+    
     supabase_url = os.getenv('SUPABASE_URL')
     supabase_key = os.getenv('SUPABASE_KEY')
     
     if not supabase_url or not supabase_key:
-        raise Exception("Supabase URL and key must be set in environment variables")
+        print("Supabase URL and key must be set in environment variables")
+        return None
     
     try:
-        # Add retry logic
-        for attempt in range(DB_RETRY_ATTEMPTS):
-            try:
-                # Set shorter timeout
-                client = create_client(supabase_url, supabase_key, options={'timeout': DB_QUERY_TIMEOUT})
-                # Test the connection with a quick query
-                client.table('users').select('id').limit(1).execute()
-                return client
-            except Exception as e:
-                if attempt < DB_RETRY_ATTEMPTS - 1:
-                    print(f"Supabase connection attempt {attempt+1} failed: {str(e)}. Retrying...")
-                    time.sleep(DB_RETRY_DELAY)
-                else:
-                    raise
+        # Create a new client with timeout
+        supabase_client = create_client(supabase_url, supabase_key, options={'timeout': 5})
+        # Test connection with a quick query
+        try:
+            supabase_client.table('users').select('id').limit(1).execute()
+            print("Successfully connected to Supabase")
+        except:
+            print("Failed to execute test query")
+            supabase_client = None
+            
+        return supabase_client
     except Exception as e:
-        print(f"Failed to connect to Supabase after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
+        print(f"Failed to connect to Supabase: {str(e)}")
         print("Falling back to mock data system")
         return None
 
@@ -98,10 +133,10 @@ def timeout_query(func, *args, **kwargs):
     thread = threading.Thread(target=target)
     thread.daemon = True  # Daemon thread will not prevent app from exiting
     thread.start()
-    thread.join(timeout=DB_QUERY_TIMEOUT)
+    thread.join(timeout=5)
     
     if not completed[0]:
-        print(f"Database query timed out after {DB_QUERY_TIMEOUT} seconds")
+        print(f"Database query timed out after 5 seconds")
         return None
     if error[0]:
         print(f"Database query error: {str(error[0])}")
@@ -118,21 +153,21 @@ def get_supabase_admin_client():
     
     try:
         # Add retry logic
-        for attempt in range(DB_RETRY_ATTEMPTS):
+        for attempt in range(3):
             try:
                 # Set shorter timeout
-                client = create_client(supabase_url, supabase_service_key, options={'timeout': DB_QUERY_TIMEOUT})
+                client = create_client(supabase_url, supabase_service_key, options={'timeout': 5})
                 # Test the connection
                 client.table('users').select('id').limit(1).execute()
                 return client
             except Exception as e:
-                if attempt < DB_RETRY_ATTEMPTS - 1:
+                if attempt < 2:
                     print(f"Supabase admin connection attempt {attempt+1} failed: {str(e)}. Retrying...")
-                    time.sleep(DB_RETRY_DELAY)
+                    time.sleep(1)
                 else:
                     raise
     except Exception as e:
-        print(f"Failed to connect to Supabase with admin privileges after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
+        print(f"Failed to connect to Supabase with admin privileges after 3 attempts: {str(e)}")
         print("Falling back to mock data system")
         return None
 
@@ -182,7 +217,7 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
         
         # Add retry logic
-        for attempt in range(DB_RETRY_ATTEMPTS):
+        for attempt in range(3):
             try:
                 # Create a new client
                 supabase = create_client(supabase_url, supabase_key)
@@ -267,9 +302,9 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
                 # Connection successful, break retry loop
                 break
             except Exception as e:
-                if attempt < DB_RETRY_ATTEMPTS - 1:
+                if attempt < 2:
                     print(f"Supabase query attempt {attempt+1} failed: {str(e)}. Retrying...")
-                    time.sleep(DB_RETRY_DELAY)
+                    time.sleep(1)
                 else:
                     raise
         
@@ -386,15 +421,15 @@ def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=
             params['rls'] = 'false'
             
             # Implement retry logic
-            for attempt in range(DB_RETRY_ATTEMPTS):
+            for attempt in range(3):
                 try:
                     # Make the request with a longer timeout
                     response = requests.get(url, headers=headers, params=params, timeout=15)
                     break
                 except requests.RequestException as e:
-                    if attempt < DB_RETRY_ATTEMPTS - 1:
+                    if attempt < 2:
                         print(f"API request attempt {attempt+1} failed: {str(e)}. Retrying...")
-                        time.sleep(DB_RETRY_DELAY)
+                        time.sleep(1)
                     else:
                         raise Exception(f"Network error in direct REST API call: {str(e)}")
             
