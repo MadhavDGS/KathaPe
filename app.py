@@ -13,6 +13,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 # Import our mock authentication system
 import auth_bypass
+import time
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +26,10 @@ os.environ.setdefault('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV
 os.environ.setdefault('DATABASE_URL', 'postgres://postgres.xhczvjwwmrvmcbwjxpxd:katha-database-password@aws-0-ap-south-1.pooler.supabase.com:5432/postgres')
 os.environ.setdefault('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
 os.environ.setdefault('UPLOAD_FOLDER', 'static/uploads')
+
+# Retry settings for database connections
+DB_RETRY_ATTEMPTS = 3
+DB_RETRY_DELAY = 1  # seconds
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')
@@ -41,7 +46,24 @@ def get_supabase_client():
     if not supabase_url or not supabase_key:
         raise Exception("Supabase URL and key must be set in environment variables")
     
-    return create_client(supabase_url, supabase_key)
+    try:
+        # Add retry logic
+        for attempt in range(DB_RETRY_ATTEMPTS):
+            try:
+                client = create_client(supabase_url, supabase_key)
+                # Test the connection
+                client.table('users').select('id').limit(1).execute()
+                return client
+            except Exception as e:
+                if attempt < DB_RETRY_ATTEMPTS - 1:
+                    print(f"Supabase connection attempt {attempt+1} failed: {str(e)}. Retrying...")
+                    time.sleep(DB_RETRY_DELAY)
+                else:
+                    raise
+    except Exception as e:
+        print(f"Failed to connect to Supabase after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
+        print("Falling back to mock data system")
+        return None
 
 # Get a Supabase client with service role permissions
 def get_supabase_admin_client():
@@ -51,7 +73,24 @@ def get_supabase_admin_client():
     if not supabase_url or not supabase_service_key:
         raise Exception("Supabase URL and service key must be set in environment variables")
     
-    return create_client(supabase_url, supabase_service_key)
+    try:
+        # Add retry logic
+        for attempt in range(DB_RETRY_ATTEMPTS):
+            try:
+                client = create_client(supabase_url, supabase_service_key)
+                # Test the connection
+                client.table('users').select('id').limit(1).execute()
+                return client
+            except Exception as e:
+                if attempt < DB_RETRY_ATTEMPTS - 1:
+                    print(f"Supabase admin connection attempt {attempt+1} failed: {str(e)}. Retrying...")
+                    time.sleep(DB_RETRY_DELAY)
+                else:
+                    raise
+    except Exception as e:
+        print(f"Failed to connect to Supabase with admin privileges after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
+        print("Falling back to mock data system")
+        return None
 
 # Utility function to safely handle UUIDs
 def safe_uuid(id_value):
@@ -98,90 +137,110 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             print("Missing Supabase credentials, using mock data")
             return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
         
-        # Create a new client
-        supabase = create_client(supabase_url, supabase_key)
-        
-        # Handle different query types
-        if query_type == 'select':
-            query = supabase.table(table_name).select(fields)
-            
-            # Apply filters
-            if filters:
-                for field, op, value in filters:
-                    if field.endswith('_id') and value:  # UUID field
-                        value = safe_uuid(value)
+        # Add retry logic
+        for attempt in range(DB_RETRY_ATTEMPTS):
+            try:
+                # Create a new client
+                supabase = create_client(supabase_url, supabase_key)
+                
+                # Handle different query types
+                if query_type == 'select':
+                    query = supabase.table(table_name).select(fields)
                     
-                    if op == 'eq':
-                        query = query.eq(field, value)
-                    elif op == 'neq':
-                        query = query.neq(field, value)
-                    elif op == 'gt':
-                        query = query.gt(field, value)
-                    elif op == 'lt':
-                        query = query.lt(field, value)
-                    elif op == 'gte':
-                        query = query.gte(field, value)
-                    elif op == 'lte':
-                        query = query.lte(field, value)
-                    elif op == 'like':
-                        query = query.like(field, value)
-                    elif op == 'ilike':
-                        query = query.ilike(field, value)
-                    elif op == 'in':
-                        query = query.in_(field, value)
-                    elif op == 'is':
-                        query = query.is_(field, value)
-            
-            result = query.execute()
-            
-        elif query_type == 'insert':
-            # Ensure UUID fields are valid
-            if data and isinstance(data, dict):
-                for key, value in data.items():
-                    if key == 'id' or key.endswith('_id'):
-                        data[key] = safe_uuid(value)
-            
-            result = supabase.table(table_name).insert(data).execute()
-            
-        elif query_type == 'update':
-            query = supabase.table(table_name).update(data)
-            
-            # Apply filters
-            if filters:
-                for field, op, value in filters:
-                    if field.endswith('_id'):  # UUID field
-                        value = safe_uuid(value)
+                    # Apply filters
+                    if filters:
+                        for field, op, value in filters:
+                            if field.endswith('_id') and value:  # UUID field
+                                value = safe_uuid(value)
+                            
+                            if op == 'eq':
+                                query = query.eq(field, value)
+                            elif op == 'neq':
+                                query = query.neq(field, value)
+                            elif op == 'gt':
+                                query = query.gt(field, value)
+                            elif op == 'lt':
+                                query = query.lt(field, value)
+                            elif op == 'gte':
+                                query = query.gte(field, value)
+                            elif op == 'lte':
+                                query = query.lte(field, value)
+                            elif op == 'like':
+                                query = query.like(field, value)
+                            elif op == 'ilike':
+                                query = query.ilike(field, value)
+                            elif op == 'in':
+                                query = query.in_(field, value)
+                            elif op == 'is':
+                                query = query.is_(field, value)
                     
-                    if op == 'eq':
-                        query = query.eq(field, value)
-                    # Add other operators as needed
-            
-            result = query.execute()
-            
-        elif query_type == 'delete':
-            query = supabase.table(table_name).delete()
-            
-            # Apply filters
-            if filters:
-                for field, op, value in filters:
-                    if field.endswith('_id'):  # UUID field
-                        value = safe_uuid(value)
+                    result = query.execute()
+                    return result
+                
+                elif query_type == 'insert':
+                    # Ensure UUID fields are valid
+                    if data and isinstance(data, dict):
+                        for key, value in data.items():
+                            if key == 'id' or key.endswith('_id'):
+                                data[key] = safe_uuid(value)
                     
-                    if op == 'eq':
-                        query = query.eq(field, value)
-                    # Add other operators as needed
-            
-            result = query.execute()
-            
-        else:
-            print(f"ERROR: Invalid query type: {query_type}")
-            return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
-        
-        return result
+                    result = supabase.table(table_name).insert(data).execute()
+                    
+                elif query_type == 'update':
+                    query = supabase.table(table_name).update(data)
+                    
+                    # Apply filters
+                    if filters:
+                        for field, op, value in filters:
+                            if field.endswith('_id'):  # UUID field
+                                value = safe_uuid(value)
+                            
+                            if op == 'eq':
+                                query = query.eq(field, value)
+                            # Add other operators as needed
+                    
+                    result = query.execute()
+                    
+                elif query_type == 'delete':
+                    query = supabase.table(table_name).delete()
+                    
+                    # Apply filters
+                    if filters:
+                        for field, op, value in filters:
+                            if field.endswith('_id'):  # UUID field
+                                value = safe_uuid(value)
+                            
+                            if op == 'eq':
+                                query = query.eq(field, value)
+                            # Add other operators as needed
+                    
+                    result = query.execute()
+                    
+                else:
+                    print(f"ERROR: Invalid query type: {query_type}")
+                    return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+                
+                # Connection successful, break retry loop
+                break
+            except Exception as e:
+                if attempt < DB_RETRY_ATTEMPTS - 1:
+                    print(f"Supabase query attempt {attempt+1} failed: {str(e)}. Retrying...")
+                    time.sleep(DB_RETRY_DELAY)
+                else:
+                    raise
         
     except Exception as e:
         print(f"Supabase query error: {str(e)}")
         print(f"Falling back to mock data")
+        # Try direct API call as a fallback
+        try:
+            result = direct_rest_api_call(table_name, query_type, fields, filters, data)
+            if result:
+                return result
+        except Exception as direct_error:
+            print(f"Direct API call also failed: {str(direct_error)}")
+            
+        # Final fallback to mock data
         return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
 
 def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=None):
