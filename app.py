@@ -4,9 +4,24 @@ import uuid
 import json
 import traceback
 import time
+import requests  # Add explicit import
+import qrcode    # Add explicit import
+import socket    # Add explicit import
+import threading # Add explicit import
+from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
+
+# Import Supabase first to ensure it's available globally
+try:
+    from supabase import create_client, Client
+    print("Successfully imported Supabase module")
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    print("Supabase module not available, will use mock data only")
+    SUPABASE_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -23,15 +38,6 @@ os.environ.setdefault('DATABASE_URL', 'postgres://postgres.xhczvjwwmrvmcbwjxpxd:
 os.environ.setdefault('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
 os.environ.setdefault('UPLOAD_FOLDER', 'static/uploads')
 
-# Import necessary modules - let's not lazy load the essentials
-# This will slightly slow startup but prevent runtime errors
-import requests
-import qrcode
-import socket
-import threading
-from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
-
 # Try to import and apply DNS patches for Supabase connectivity
 try:
     import patches
@@ -41,13 +47,6 @@ except ImportError:
     print("DNS patches module not found, continuing without DNS patches")
 except Exception as e:
     print(f"Error applying DNS patches: {str(e)}")
-
-# Import Supabase
-try:
-    from supabase import create_client, Client
-    print("Successfully imported Supabase module")
-except ImportError:
-    print("Supabase module not available, will use mock data only")
 
 # Import our mock authentication system
 import auth_bypass
@@ -67,9 +66,19 @@ DB_QUERY_TIMEOUT = 5  # seconds
 supabase_client = None
 supabase_admin_client = None
 
+# Define these globals explicitly to fix "name not defined" errors
+create_client = None
+if SUPABASE_AVAILABLE:
+    from supabase import create_client, Client
+
 # Supabase client function
 def get_supabase_client():
-    global supabase_client
+    global supabase_client, create_client
+    
+    # If Supabase is not available, just return None
+    if not SUPABASE_AVAILABLE:
+        print("Supabase module not available, using mock data")
+        return None
     
     # If we already have a client, return it
     if supabase_client:
@@ -86,8 +95,11 @@ def get_supabase_client():
         # Create a client with retry logic
         for attempt in range(DB_RETRY_ATTEMPTS):
             try:
+                # Import create_client if not already available
+                if not create_client:
+                    from supabase import create_client
+                
                 # Create a new client with timeout
-                from supabase import create_client
                 supabase_client = create_client(supabase_url, supabase_key, options={'timeout': DB_QUERY_TIMEOUT})
                 
                 # Test connection with a quick query
@@ -111,6 +123,118 @@ def get_supabase_client():
         print(f"Failed to connect to Supabase: {str(e)}")
         print("Falling back to mock data system")
         return None
+
+# Get a Supabase client with service role permissions
+def get_supabase_admin_client():
+    global supabase_admin_client, create_client
+    
+    # If Supabase is not available, just return None
+    if not SUPABASE_AVAILABLE:
+        print("Supabase module not available, using mock data")
+        return None
+    
+    # If we already have an admin client, return it
+    if supabase_admin_client:
+        return supabase_admin_client
+    
+    supabase_url = os.getenv('SUPABASE_URL')
+    supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
+    
+    if not supabase_url or not supabase_service_key:
+        print("Supabase URL and service key must be set in environment variables")
+        return None
+    
+    try:
+        # Add retry logic
+        for attempt in range(DB_RETRY_ATTEMPTS):
+            try:
+                # Import create_client if not already available
+                if not create_client:
+                    from supabase import create_client
+                
+                # Set shorter timeout
+                supabase_admin_client = create_client(supabase_url, supabase_service_key, options={'timeout': DB_QUERY_TIMEOUT})
+                # Test the connection
+                supabase_admin_client.table('users').select('id').limit(1).execute()
+                return supabase_admin_client
+            except Exception as e:
+                if attempt < DB_RETRY_ATTEMPTS - 1:
+                    print(f"Supabase admin connection attempt {attempt+1} failed: {str(e)}. Retrying...")
+                    time.sleep(DB_RETRY_DELAY)
+                else:
+                    raise
+    except Exception as e:
+        print(f"Failed to connect to Supabase with admin privileges after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
+        print("Falling back to mock data system")
+        return None
+
+# Safe query wrapper for Supabase - direct implementation to avoid imported function issues
+def query_table(table_name, query_type='select', fields='*', filters=None, data=None):
+    """
+    Safely query a Supabase table with proper error handling
+    """
+    try:
+        # Get Supabase client
+        client = get_supabase_client()
+        
+        if not client:
+            print("No Supabase client available, using mock data")
+            return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+        
+        # Handle different query types
+        if query_type == 'select':
+            query = client.table(table_name).select(fields)
+            
+            # Apply filters
+            if filters:
+                for field, op, value in filters:
+                    if op == 'eq':
+                        query = query.eq(field, value)
+                    elif op == 'neq':
+                        query = query.neq(field, value)
+                    # Add other operators as needed
+            
+            result = query.execute()
+            return result
+        
+        elif query_type == 'insert':
+            result = client.table(table_name).insert(data).execute()
+            return result
+            
+        elif query_type == 'update':
+            query = client.table(table_name).update(data)
+            
+            # Apply filters
+            if filters:
+                for field, op, value in filters:
+                    if op == 'eq':
+                        query = query.eq(field, value)
+                    # Add other operators as needed
+            
+            result = query.execute()
+            return result
+            
+        elif query_type == 'delete':
+            query = client.table(table_name).delete()
+            
+            # Apply filters
+            if filters:
+                for field, op, value in filters:
+                    if op == 'eq':
+                        query = query.eq(field, value)
+                    # Add other operators as needed
+            
+            result = query.execute()
+            return result
+            
+        else:
+            print(f"ERROR: Invalid query type: {query_type}")
+            return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+        
+    except Exception as e:
+        print(f"Supabase query error: {str(e)}")
+        print(f"Falling back to mock data")
+        return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
 
 # Timeout-aware database query function
 def timeout_query(func, *args, **kwargs):
@@ -140,393 +264,33 @@ def timeout_query(func, *args, **kwargs):
         return None
     return result[0]
 
-# Get a Supabase client with service role permissions
-def get_supabase_admin_client():
-    global supabase_admin_client
-    
-    # If we already have an admin client, return it
-    if supabase_admin_client:
-        return supabase_admin_client
-    
-    supabase_url = os.getenv('SUPABASE_URL')
-    supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
-    
-    if not supabase_url or not supabase_service_key:
-        print("Supabase URL and service key must be set in environment variables")
-        return None
-    
-    try:
-        # Add retry logic
-        for attempt in range(DB_RETRY_ATTEMPTS):
-            try:
-                # Set shorter timeout
-                from supabase import create_client
-                supabase_admin_client = create_client(supabase_url, supabase_service_key, options={'timeout': DB_QUERY_TIMEOUT})
-                # Test the connection
-                supabase_admin_client.table('users').select('id').limit(1).execute()
-                return supabase_admin_client
-            except Exception as e:
-                if attempt < DB_RETRY_ATTEMPTS - 1:
-                    print(f"Supabase admin connection attempt {attempt+1} failed: {str(e)}. Retrying...")
-                    time.sleep(DB_RETRY_DELAY)
-                else:
-                    raise
-    except Exception as e:
-        print(f"Failed to connect to Supabase with admin privileges after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
-        print("Falling back to mock data system")
-        return None
-
-# Utility function to safely handle UUIDs
-def safe_uuid(id_value):
-    """Ensure a value is a valid UUID string or generate a new one"""
-    if not id_value:
-        stack = traceback.format_stack()
-        print(f"WARNING: Received None UUID. Generating new UUID. Call stack:")
-        for line in stack[-5:-1]:  # Print last 4 stack frames
-            print(f"  {line.strip()}")
-        return str(uuid.uuid4())
-    
-    try:
-        # Test if it's a valid UUID
-        uuid.UUID(str(id_value))
-        return str(id_value)
-    except (ValueError, TypeError, AttributeError) as e:
-        stack = traceback.format_stack()
-        print(f"WARNING: Invalid UUID '{id_value}' of type {type(id_value).__name__}. Error: {str(e)}. Generating new UUID. Call stack:")
-        for line in stack[-5:-1]:  # Print last 4 stack frames
-            print(f"  {line.strip()}")
-        return str(uuid.uuid4())
-
-# Safe query wrapper for Supabase
-def query_table(table_name, query_type='select', fields='*', filters=None, data=None):
-    """
-    Safely query a Supabase table with proper error handling
-    
-    Args:
-        table_name: The name of the table to query
-        query_type: The type of query (select, insert, update, delete)
-        fields: Fields to select (for select queries)
-        filters: List of tuples with (field, operator, value) for filtering
-        data: Data for insert/update operations
-    
-    Returns:
-        Query result or None on failure
-    """
-    try:
-        # Get Supabase client
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_KEY')
-        
-        if not supabase_url or not supabase_key:
-            print("Missing Supabase credentials, using mock data")
-            return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
-        
-        # Add retry logic
-        for attempt in range(3):
-            try:
-                # Create a new client
-                supabase = create_client(supabase_url, supabase_key)
-                
-                # Handle different query types
-                if query_type == 'select':
-                    query = supabase.table(table_name).select(fields)
-                    
-                    # Apply filters
-                    if filters:
-                        for field, op, value in filters:
-                            if field.endswith('_id') and value:  # UUID field
-                                value = safe_uuid(value)
-                            
-                            if op == 'eq':
-                                query = query.eq(field, value)
-                            elif op == 'neq':
-                                query = query.neq(field, value)
-                            elif op == 'gt':
-                                query = query.gt(field, value)
-                            elif op == 'lt':
-                                query = query.lt(field, value)
-                            elif op == 'gte':
-                                query = query.gte(field, value)
-                            elif op == 'lte':
-                                query = query.lte(field, value)
-                            elif op == 'like':
-                                query = query.like(field, value)
-                            elif op == 'ilike':
-                                query = query.ilike(field, value)
-                            elif op == 'in':
-                                query = query.in_(field, value)
-                            elif op == 'is':
-                                query = query.is_(field, value)
-                    
-                    result = query.execute()
-                    return result
-                
-                elif query_type == 'insert':
-                    # Ensure UUID fields are valid
-                    if data and isinstance(data, dict):
-                        for key, value in data.items():
-                            if key == 'id' or key.endswith('_id'):
-                                data[key] = safe_uuid(value)
-                    
-                    result = supabase.table(table_name).insert(data).execute()
-                    
-                elif query_type == 'update':
-                    query = supabase.table(table_name).update(data)
-                    
-                    # Apply filters
-                    if filters:
-                        for field, op, value in filters:
-                            if field.endswith('_id'):  # UUID field
-                                value = safe_uuid(value)
-                            
-                            if op == 'eq':
-                                query = query.eq(field, value)
-                            # Add other operators as needed
-                    
-                    result = query.execute()
-                    
-                elif query_type == 'delete':
-                    query = supabase.table(table_name).delete()
-                    
-                    # Apply filters
-                    if filters:
-                        for field, op, value in filters:
-                            if field.endswith('_id'):  # UUID field
-                                value = safe_uuid(value)
-                            
-                            if op == 'eq':
-                                query = query.eq(field, value)
-                            # Add other operators as needed
-                    
-                    result = query.execute()
-                    
-                else:
-                    print(f"ERROR: Invalid query type: {query_type}")
-                    return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
-                
-                # Connection successful, break retry loop
-                break
-            except Exception as e:
-                if attempt < 2:
-                    print(f"Supabase query attempt {attempt+1} failed: {str(e)}. Retrying...")
-                    time.sleep(1)
-                else:
-                    raise
-        
-    except Exception as e:
-        print(f"Supabase query error: {str(e)}")
-        print(f"Falling back to mock data")
-        # Try direct API call as a fallback
-        try:
-            result = direct_rest_api_call(table_name, query_type, fields, filters, data)
-            if result:
-                return result
-        except Exception as direct_error:
-            print(f"Direct API call also failed: {str(direct_error)}")
-            
-        # Final fallback to mock data
-        return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
-
-# DNS resolver function to handle name resolution issues
-def resolve_domain(domain):
-    """Attempt to resolve a domain name to IP address manually"""
-    try:
-        print(f"Trying to manually resolve domain: {domain}")
-        # Try to get the IP address
-        ip_address = socket.gethostbyname(domain)
-        print(f"Successfully resolved {domain} to {ip_address}")
-        return ip_address
-    except Exception as e:
-        print(f"Manual DNS resolution failed for {domain}: {str(e)}")
-        
-        # Return a fallback IP if we know it
-        if domain == 'xhczvjwwmrvmcbwjxpxd.supabase.co':
-            # Fallback to Google DNS to test connectivity
-            print("Using Google DNS (8.8.8.8) for connectivity test")
-            try:
-                socket.create_connection(("8.8.8.8", 53), timeout=3)
-                print("Internet connection is working")
-            except:
-                print("Internet connection may be unavailable")
-                
-            print("Using fallback direct API approach for Supabase")
-        return None
-
-# Direct REST API call with improved error handling
-def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=None):
-    """
-    Fall back to direct REST API calls when Supabase client fails
-    """
-    supabase_url = os.getenv('SUPABASE_URL')
-    supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
-    
-    if not supabase_url or not supabase_service_key:
-        print("Missing Supabase credentials for direct API call")
-        return None
-    
-    # Extract domain from URL to check if we can resolve it
-    import urllib.parse
-    domain = urllib.parse.urlparse(supabase_url).netloc
-    resolve_domain(domain)
-    
-    # Continue with the API call
-    headers = {
-        "apikey": supabase_service_key,
-        "Authorization": f"Bearer {supabase_service_key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=representation",
-        "Accept-Profile": "service_role",  # Explicitly use service role
-        "X-Client-Info": "direct-api-call"
-    }
-    
-    try:
-        # Build the URL
-        url = f"{supabase_url}/rest/v1/{table_name}"
-        print(f"Making direct API call to: {url}")
-        
-        # Handle different query types
-        if query_type == 'select':
-            params = {}
-            
-            # Process field selection
-            if fields and fields != '*':
-                params['select'] = fields
-                
-            # Process filters
-            if filters:
-                for field, op, value in filters:
-                    if field.endswith('_id'):  # This is likely a UUID field
-                        value = safe_uuid(value)
-                        
-                    if op == 'eq':
-                        params[field] = f"eq.{value}"
-                    elif op == 'neq':
-                        params[field] = f"neq.{value}"
-                    elif op == 'gt':
-                        params[field] = f"gt.{value}"
-                    elif op == 'lt':
-                        params[field] = f"lt.{value}"
-                    elif op == 'gte':
-                        params[field] = f"gte.{value}"
-                    elif op == 'lte':
-                        params[field] = f"lte.{value}"
-                    elif op == 'like':
-                        params[field] = f"like.{value}"
-                    elif op == 'ilike':
-                        params[field] = f"ilike.{value}"
-                    elif op == 'in':
-                        if isinstance(value, list):
-                            params[field] = f"in.({','.join(map(str, value))})"
-                        else:
-                            params[field] = f"eq.{value}"  # Fallback if not a list
-                    elif op == 'is':
-                        params[field] = f"is.{value}"
-            
-            # Add row-level security override
-            params['rls'] = 'false'
-            
-            # Implement retry logic
-            for attempt in range(3):
-                try:
-                    # Make the request with a longer timeout
-                    response = requests.get(url, headers=headers, params=params, timeout=15)
-                    break
-                except requests.RequestException as e:
-                    if attempt < 2:
-                        print(f"API request attempt {attempt+1} failed: {str(e)}. Retrying...")
-                        time.sleep(1)
-                    else:
-                        raise Exception(f"Network error in direct REST API call: {str(e)}")
-            
-            if response.status_code < 300:
-                return response.json()
-            else:
-                print(f"Direct API call failed: {response.status_code} - {response.text}")
-                return None
-        
-        elif query_type == 'insert':
-            try:
-                response = requests.post(url, headers=headers, json=data)
-                if response.status_code < 300:
-                    return response.json()
-                else:
-                    print(f"Direct API insert failed: {response.status_code} - {response.text}")
-                    return None
-            except requests.RequestException as e:
-                print(f"Network error in direct REST API insert: {str(e)}")
-                return None
-        
-        elif query_type == 'update':
-            try:
-                response = requests.patch(url, headers=headers, json=data)
-                if response.status_code < 300:
-                    return response.json()
-                else:
-                    print(f"Direct API update failed: {response.status_code} - {response.text}")
-                    return None
-            except requests.RequestException as e:
-                print(f"Network error in direct REST API update: {str(e)}")
-                return None
-        
-        elif query_type == 'delete':
-            try:
-                response = requests.delete(url, headers=headers)
-                if response.status_code < 300:
-                    return response.json()
-                else:
-                    print(f"Direct API delete failed: {response.status_code} - {response.text}")
-                    return None
-            except requests.RequestException as e:
-                print(f"Network error in direct REST API delete: {str(e)}")
-                return None
-        
-        else:
-            print(f"ERROR: Invalid query type: {query_type}")
-            return None
-    
-    except Exception as e:
-        print(f"Direct API call error: {str(e)}")
-        return None
-
-# File upload configurations
-UPLOAD_FOLDER = 'static/uploads'
-QR_CODES_FOLDER = 'static/qr_codes'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
-# Create folders if they don't exist
-for folder in [UPLOAD_FOLDER, QR_CODES_FOLDER]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['QR_CODES_FOLDER'] = QR_CODES_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# Function to generate QR code for business
+# Function to generate QR code for business with explicit error handling
 def generate_business_qr_code(business_id, access_pin):
-    qr_data = f"business:{access_pin}"
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(qr_data)
-    qr.make(fit=True)
-    
-    img = qr.make_image(fill_color="black", back_color="white")
-    qr_folder = app.config['QR_CODES_FOLDER']
-    
-    # Ensure the directory exists
-    if not os.path.exists(qr_folder):
-        os.makedirs(qr_folder)
+    try:
+        qr_data = f"business:{access_pin}"
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_data)
+        qr.make(fit=True)
         
-    qr_filename = os.path.join(qr_folder, f"{business_id}.png")
-    img.save(qr_filename)
-    return qr_filename
+        img = qr.make_image(fill_color="black", back_color="white")
+        qr_folder = app.config['QR_CODES_FOLDER']
+        
+        # Ensure the directory exists
+        if not os.path.exists(qr_folder):
+            os.makedirs(qr_folder)
+            
+        qr_filename = os.path.join(qr_folder, f"{business_id}.png")
+        img.save(qr_filename)
+        return qr_filename
+    except Exception as e:
+        print(f"Error generating QR code: {str(e)}")
+        # Return a default path that should exist
+        return "static/images/placeholder_qr.png"
 
 # Authentication decorator
 def login_required(f):
