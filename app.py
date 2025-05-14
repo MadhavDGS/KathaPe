@@ -16,11 +16,16 @@ from dotenv import load_dotenv
 
 # Import Supabase first to ensure it's available globally
 try:
+    # Import supabase with proper error handling
     from supabase import create_client, Client
+    from supabase.lib.client_options import ClientOptions  # Import ClientOptions
     print("Successfully imported Supabase module")
     SUPABASE_AVAILABLE = True
-except ImportError:
-    print("Supabase module not available, will use mock data only")
+except ImportError as e:
+    print(f"Supabase module not available, will use mock data only: {str(e)}")
+    SUPABASE_AVAILABLE = False
+except Exception as e:
+    print(f"Error setting up Supabase: {str(e)}")
     SUPABASE_AVAILABLE = False
 
 # Load environment variables
@@ -73,8 +78,10 @@ supabase_admin_client = None
 
 # Define these globals explicitly to fix "name not defined" errors
 create_client = None
+ClientOptions = None
 if SUPABASE_AVAILABLE:
     from supabase import create_client, Client
+    from supabase.lib.client_options import ClientOptions
 
 # Utility function to ensure valid UUIDs
 def safe_uuid(id_value):
@@ -90,9 +97,9 @@ def safe_uuid(id_value):
         print(f"WARNING: Invalid UUID '{id_value}' - generating new UUID")
         return str(uuid.uuid4())
 
-# Supabase client function
+# Supabase client function with fixed initialization
 def get_supabase_client():
-    global supabase_client, create_client
+    global supabase_client, create_client, ClientOptions
     
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
@@ -115,15 +122,25 @@ def get_supabase_client():
         for attempt in range(DB_RETRY_ATTEMPTS):
             try:
                 # Import create_client if not already available
-                if not create_client:
+                if not create_client or not ClientOptions:
                     from supabase import create_client
+                    from supabase.lib.client_options import ClientOptions
                 
-                # Create a new client with timeout
-                supabase_client = create_client(supabase_url, supabase_key, options={'timeout': DB_QUERY_TIMEOUT})
+                # Create options object properly with timeout
+                options = ClientOptions(
+                    schema="public",
+                    headers={},
+                    auto_refresh_token=True,
+                    persist_session=True,
+                    timeout=DB_QUERY_TIMEOUT
+                )
+                
+                # Create a new client with proper options
+                supabase_client = create_client(supabase_url, supabase_key, options=options)
                 
                 # Test connection with a quick query
                 try:
-                    supabase_client.table('users').select('id').limit(1).execute()
+                    result = supabase_client.table('users').select('id').limit(1).execute()
                     print("Successfully connected to Supabase")
                     return supabase_client
                 except Exception as test_error:
@@ -143,9 +160,9 @@ def get_supabase_client():
         print("Falling back to mock data system")
         return None
 
-# Get a Supabase client with service role permissions
+# Get a Supabase client with service role permissions with fixed initialization 
 def get_supabase_admin_client():
-    global supabase_admin_client, create_client
+    global supabase_admin_client, create_client, ClientOptions
     
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
@@ -168,11 +185,22 @@ def get_supabase_admin_client():
         for attempt in range(DB_RETRY_ATTEMPTS):
             try:
                 # Import create_client if not already available
-                if not create_client:
+                if not create_client or not ClientOptions:
                     from supabase import create_client
+                    from supabase.lib.client_options import ClientOptions
                 
-                # Set shorter timeout
-                supabase_admin_client = create_client(supabase_url, supabase_service_key, options={'timeout': DB_QUERY_TIMEOUT})
+                # Create options object properly with timeout
+                options = ClientOptions(
+                    schema="public",
+                    headers={},
+                    auto_refresh_token=True,
+                    persist_session=True,
+                    timeout=DB_QUERY_TIMEOUT
+                )
+                
+                # Create admin client with proper options
+                supabase_admin_client = create_client(supabase_url, supabase_service_key, options=options)
+                
                 # Test the connection
                 supabase_admin_client.table('users').select('id').limit(1).execute()
                 return supabase_admin_client
