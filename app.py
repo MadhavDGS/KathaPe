@@ -5,7 +5,6 @@ import json
 import traceback
 import time
 import requests  # Add explicit import
-import qrcode    # Add explicit import
 import socket    # Add explicit import
 import threading # Add explicit import
 from werkzeug.utils import secure_filename
@@ -13,6 +12,16 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
+
+# Setup QR code functionality with fallback
+QR_AVAILABLE = False
+try:
+    import qrcode
+    from PIL import Image
+    QR_AVAILABLE = True
+    print("QR code generation available")
+except ImportError as e:
+    print(f"QR code generation not available: {str(e)}")
 
 # Import Supabase first to ensure it's available globally
 try:
@@ -64,13 +73,42 @@ except Exception as e:
     print(f"Error applying DNS patches: {str(e)}")
 
 # Import our mock authentication system
-import auth_bypass
+try:
+    import auth_bypass
+    MOCK_AUTH_AVAILABLE = True
+except ImportError:
+    print("Mock auth system not available, creating placeholder")
+    MOCK_AUTH_AVAILABLE = False
+    # Create a simple placeholder module
+    class MockAuthBypass:
+        def mock_login(self, phone, password, user_type='customer'):
+            return True, {"id": str(uuid.uuid4()), "name": f"Demo {user_type.title()}"}
+            
+        def mock_register(self, phone, password, name, user_type='customer'):
+            return True, "User registered successfully"
+            
+        def mock_query_table(self, table_name, query_type='select', fields='*', filters=None, data=None):
+            class MockResponse:
+                def __init__(self, data):
+                    self.data = data
+            
+            if query_type == 'select':
+                return MockResponse([])
+            elif query_type == 'insert':
+                return MockResponse([data] if data else [])
+            elif query_type == 'update':
+                return MockResponse([])
+            else:
+                return MockResponse([])
+    
+    auth_bypass = MockAuthBypass()
 
 # Create folder structure
 upload_folder = os.getenv('UPLOAD_FOLDER', 'static/uploads')
 os.makedirs(upload_folder, exist_ok=True)
 qr_folder = 'static/qr_codes'
 os.makedirs(qr_folder, exist_ok=True)
+os.makedirs('static/images', exist_ok=True)
 
 # Set up file upload configuration
 app.config['UPLOAD_FOLDER'] = upload_folder
@@ -357,6 +395,11 @@ def timeout_query(func, *args, **kwargs):
 # Function to generate QR code for business with explicit error handling
 def generate_business_qr_code(business_id, access_pin):
     try:
+        # If QR code generation is not available, return placeholder
+        if not QR_AVAILABLE:
+            print("QR code generation not available, using placeholder")
+            return "static/images/placeholder_qr.png"
+        
         qr_data = f"business:{access_pin}"
         qr = qrcode.QRCode(
             version=1,
@@ -379,8 +422,16 @@ def generate_business_qr_code(business_id, access_pin):
         return qr_filename
     except Exception as e:
         print(f"Error generating QR code: {str(e)}")
-        # Return a default path that should exist
-        return "static/images/placeholder_qr.png"
+        # Create a text-based placeholder if we can't generate an image
+        try:
+            placeholder_path = "static/images/placeholder_qr.html"
+            if not os.path.exists(placeholder_path):
+                with open(placeholder_path, "w") as f:
+                    f.write(f"<div style='border:1px solid black; padding:10px; width:150px; height:150px; text-align:center;'>QR Code<br>Business: {access_pin}</div>")
+            return placeholder_path
+        except:
+            # Return a default path that should exist
+            return "static/images/placeholder_qr.png"
 
 # Authentication decorator
 def login_required(f):
