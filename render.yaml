@@ -3,9 +3,17 @@ services:
     name: kathape
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app_bridge:application --timeout 60 --no-sendfile
+    startCommand: python app.py
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.11
-      - key: FLASK_ENV
-        value: production 
+      - key: SUPABASE_URL
+        value: https://xhczvjwwmrvmcbwjxpxd.supabase.co
+      - key: SUPABASE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTM3MTQwNTgsImV4cCI6MjAyOTI5MDA1OH0.xnG-kIOiY4xbB3_QnTJtLXvwxU-fkW2RKlJw2WUoRE8
+      - key: SUPABASE_SERVICE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcxMzcxNDA1OCwiZXhwIjoyMDI5MjkwMDU4fQ.PjOwIuDIx5a_d3u4C7cFDuOQP8NaOXQKQzH2iSXnSEA
+      - key: SECRET_KEY
+        value: fc36290a52f89c1c92655b7d22b198e4
+      - key: UPLOAD_FOLDER
+        value: static/uploads
+      - key: PORT
+        value: 10000 

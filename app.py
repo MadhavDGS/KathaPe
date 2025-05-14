@@ -1852,4 +1852,7 @@ def ensure_customer_credit_exists(business_id, customer_id, initial_balance=0):
 
 # Run the application
 if __name__ == '__main__':
-    app.run(debug=True, port=5003) 
+    # Get port from environment variable for Render compatibility
+    port = int(os.environ.get('PORT', 5003))
+    # Set host to 0.0.0.0 to make it accessible outside the container
+    app.run(debug=False, host='0.0.0.0', port=port) 
