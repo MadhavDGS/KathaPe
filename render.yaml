@@ -3,7 +3,7 @@ services:
     name: kathape
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app_bridge:application
+    startCommand: gunicorn app_bridge:application --timeout 60 --preload --workers 2
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11 

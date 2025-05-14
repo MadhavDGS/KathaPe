@@ -6,8 +6,14 @@ import os
 import sys
 import inspect
 import importlib.util
+import time
+import signal
 
 print("Starting app_bridge.py...")
+
+# Set up a timeout handler to prevent worker hangs during initialization
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
 
 # Try to import and apply DNS patches for Supabase connectivity
 try:
@@ -36,6 +42,10 @@ else:
     
     # Load the app.py file directly using spec
     try:
+        # Set a timeout for module loading to prevent worker hanging
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(10)  # 10 seconds timeout for loading
+        
         # Create a module spec
         spec = importlib.util.spec_from_file_location("app_py_module", app_py_path)
         app_py_module = importlib.util.module_from_spec(spec)
@@ -43,6 +53,9 @@ else:
         # Execute the module
         spec.loader.exec_module(app_py_module)
         print("Successfully loaded app.py as a module")
+        
+        # Reset the alarm
+        signal.alarm(0)
         
         # Check for Flask app instance
         app = None
@@ -63,6 +76,23 @@ else:
                 return "Error: No Flask app found in app.py! This is a fallback app."
         else:
             print(f"Successfully found app instance in app.py")
+            
+            # Configure timeouts for the app
+            try:
+                if hasattr(app, 'config'):
+                    app.config['TIMEOUT'] = 5
+                    print("Set app timeout to 5 seconds")
+            except Exception as config_error:
+                print(f"Failed to configure timeouts: {str(config_error)}")
+                
+    except TimeoutError:
+        print("Timeout while loading app.py - creating fallback app")
+        from flask import Flask
+        app = Flask(__name__)
+        
+        @app.route('/')
+        def index():
+            return "Timeout while loading app.py! This is a fallback app."
     except Exception as e:
         print(f"Error loading app.py: {str(e)}")
         # Create a fallback app
@@ -72,6 +102,15 @@ else:
         @app.route('/')
         def index():
             return f"Error loading app.py: {str(e)}"
+
+# Configure the app's request handling
+try:
+    # Set gunicorn worker timeout
+    if hasattr(app, 'config'):
+        app.config['TIMEOUT'] = 25  # 25 seconds
+        app.config['PREFERRED_URL_SCHEME'] = 'https'  # Ensure https for all URLs
+except Exception as config_error:
+    print(f"Failed to configure app: {str(config_error)}")
 
 # This is what gunicorn will import
 application = app 

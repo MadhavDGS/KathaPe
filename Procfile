@@ -1,1 +1,1 @@
-web: gunicorn app_bridge:application 
+web: gunicorn app_bridge:application --timeout 60 --preload --workers 2 
