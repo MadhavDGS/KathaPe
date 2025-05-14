@@ -5,15 +5,27 @@ import json
 import requests
 import qrcode
 import traceback
+import time
+import socket
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 from supabase import create_client, Client
 from dotenv import load_dotenv
+
+# Try to import and apply DNS patches for Supabase connectivity
+try:
+    import patches
+    patches.apply_patches()
+    print("Applied DNS resolution patches for Supabase")
+except ImportError:
+    print("DNS patches module not found, continuing without DNS patches")
+except Exception as e:
+    print(f"Error applying DNS patches: {str(e)}")
+
 # Import our mock authentication system
 import auth_bypass
-import time
 
 # Load environment variables
 load_dotenv()
@@ -243,6 +255,32 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
         # Final fallback to mock data
         return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
 
+# DNS resolver function to handle name resolution issues
+def resolve_domain(domain):
+    """Attempt to resolve a domain name to IP address manually"""
+    try:
+        print(f"Trying to manually resolve domain: {domain}")
+        # Try to get the IP address
+        ip_address = socket.gethostbyname(domain)
+        print(f"Successfully resolved {domain} to {ip_address}")
+        return ip_address
+    except Exception as e:
+        print(f"Manual DNS resolution failed for {domain}: {str(e)}")
+        
+        # Return a fallback IP if we know it
+        if domain == 'xhczvjwwmrvmcbwjxpxd.supabase.co':
+            # Fallback to Google DNS to test connectivity
+            print("Using Google DNS (8.8.8.8) for connectivity test")
+            try:
+                socket.create_connection(("8.8.8.8", 53), timeout=3)
+                print("Internet connection is working")
+            except:
+                print("Internet connection may be unavailable")
+                
+            print("Using fallback direct API approach for Supabase")
+        return None
+
+# Direct REST API call with improved error handling
 def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=None):
     """
     Fall back to direct REST API calls when Supabase client fails
@@ -250,6 +288,16 @@ def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=
     supabase_url = os.getenv('SUPABASE_URL')
     supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
     
+    if not supabase_url or not supabase_service_key:
+        print("Missing Supabase credentials for direct API call")
+        return None
+    
+    # Extract domain from URL to check if we can resolve it
+    import urllib.parse
+    domain = urllib.parse.urlparse(supabase_url).netloc
+    resolve_domain(domain)
+    
+    # Continue with the API call
     headers = {
         "apikey": supabase_service_key,
         "Authorization": f"Bearer {supabase_service_key}",
@@ -262,6 +310,7 @@ def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=
     try:
         # Build the URL
         url = f"{supabase_url}/rest/v1/{table_name}"
+        print(f"Making direct API call to: {url}")
         
         # Handle different query types
         if query_type == 'select':
@@ -304,281 +353,68 @@ def direct_rest_api_call(table_name, query_type, fields='*', filters=None, data=
             # Add row-level security override
             params['rls'] = 'false'
             
-            # Make the request
-            try:
-                response = requests.get(url, headers=headers, params=params, timeout=10)
-                
-                # If first attempt fails with 403, try again with the row-level security parameter
-                if response.status_code == 403 and 'permission denied' in response.text.lower():
-                    print(f"Permission denied, trying with rpc endpoint...")
-                    
-                    # Build a SQL query to bypass RLS
-                    sql_query = f"SELECT {fields} FROM {table_name}"
-                    
-                    # Add WHERE conditions based on filters
-                    if filters:
-                        where_conditions = []
-                        for field, op, value in filters:
-                            sql_op = {
-                                'eq': '=',
-                                'neq': '!=',
-                                'gt': '>',
-                                'lt': '<',
-                                'gte': '>=',
-                                'lte': '<=',
-                                'like': 'LIKE',
-                                'ilike': 'ILIKE',
-                                'in': 'IN',
-                                'is': 'IS'
-                            }.get(op, '=')
-                            
-                            if op == 'in' and isinstance(value, list):
-                                values_str = ','.join([f"'{v}'" for v in value])
-                                where_conditions.append(f"{field} {sql_op} ({values_str})")
-                            elif op == 'is':
-                                where_conditions.append(f"{field} {sql_op} {value}")
-                            else:
-                                where_conditions.append(f"{field} {sql_op} '{value}'")
-                                
-                        if where_conditions:
-                            sql_query += " WHERE " + " AND ".join(where_conditions)
-                    
-                    # Try to use the SQL endpoint
-                    rpc_url = f"{supabase_url}/rest/v1/rpc/exec_sql"
-                    rpc_response = requests.post(
-                        rpc_url,
-                        headers=headers,
-                        json={"query": sql_query},
-                        timeout=10
-                    )
-                    
-                    if rpc_response.status_code < 300:
-                        response = rpc_response
+            # Implement retry logic
+            for attempt in range(DB_RETRY_ATTEMPTS):
+                try:
+                    # Make the request with a longer timeout
+                    response = requests.get(url, headers=headers, params=params, timeout=15)
+                    break
+                except requests.RequestException as e:
+                    if attempt < DB_RETRY_ATTEMPTS - 1:
+                        print(f"API request attempt {attempt+1} failed: {str(e)}. Retrying...")
+                        time.sleep(DB_RETRY_DELAY)
                     else:
-                        # If RPC fails, return mock data to allow app to continue
-                        print(f"RPC query failed: {rpc_response.status_code} - {rpc_response.text}")
-                        class MockResponse:
-                            def __init__(self):
-                                self.data = []
-                        return MockResponse()
-            except requests.RequestException as e:
-                print(f"Network error in direct REST API call: {str(e)}")
-                class MockResponse:
-                    def __init__(self):
-                        self.data = []
-                return MockResponse()
+                        raise Exception(f"Network error in direct REST API call: {str(e)}")
             
+            if response.status_code < 300:
+                return response.json()
+            else:
+                print(f"Direct API call failed: {response.status_code} - {response.text}")
+                return None
+        
         elif query_type == 'insert':
             try:
                 response = requests.post(url, headers=headers, json=data)
-                
-                # If first attempt fails with 403, try with the SQL endpoint
-                if response.status_code == 403 and 'permission denied' in response.text.lower():
-                    print(f"Permission denied on insert, trying SQL endpoint...")
-                    
-                    # Build insert SQL
-                    fields_str = ', '.join(data.keys())
-                    placeholders = ', '.join([f"'{v}'" if not isinstance(v, (int, float)) else str(v) for v in data.values()])
-                    sql_query = f"INSERT INTO {table_name} ({fields_str}) VALUES ({placeholders}) RETURNING *;"
-                    
-                    # Try SQL endpoint
-                    rpc_url = f"{supabase_url}/rest/v1/rpc/exec_sql"
-                    rpc_response = requests.post(
-                        rpc_url,
-                        headers=headers,
-                        json={"query": sql_query},
-                        timeout=10
-                    )
-                    
-                    if rpc_response.status_code < 300:
-                        response = rpc_response
-                    else:
-                        print(f"SQL insert failed: {rpc_response.status_code} - {rpc_response.text}")
+                if response.status_code < 300:
+                    return response.json()
+                else:
+                    print(f"Direct API insert failed: {response.status_code} - {response.text}")
+                    return None
             except requests.RequestException as e:
                 print(f"Network error in direct REST API insert: {str(e)}")
-                class MockResponse:
-                    def __init__(self):
-                        self.data = []
-                return MockResponse()
-            
+                return None
+        
         elif query_type == 'update':
-            # Apply filters to the URL for update
-            if filters:
-                for field, op, value in filters:
-                    if op == 'eq':
-                        url += f"?{field}=eq.{value}"
-                        break
-            
             try:
                 response = requests.patch(url, headers=headers, json=data)
-                
-                # If first attempt fails with 403, try with SQL
-                if response.status_code == 403 and 'permission denied' in response.text.lower():
-                    print(f"Permission denied on update, trying SQL endpoint...")
-                    
-                    # Build update SQL
-                    set_clauses = []
-                    for key, value in data.items():
-                        if isinstance(value, (int, float)):
-                            set_clauses.append(f"{key} = {value}")
-                        else:
-                            set_clauses.append(f"{key} = '{value}'")
-                    
-                    sql_query = f"UPDATE {table_name} SET {', '.join(set_clauses)}"
-                    
-                    # Add where clause from filters
-                    if filters:
-                        where_conditions = []
-                        for field, op, value in filters:
-                            sql_op = {
-                                'eq': '=',
-                                'neq': '!=',
-                                'gt': '>',
-                                'lt': '<',
-                                'gte': '>=',
-                                'lte': '<=',
-                                'like': 'LIKE',
-                                'ilike': 'ILIKE',
-                                'in': 'IN',
-                                'is': 'IS'
-                            }.get(op, '=')
-                            
-                            if op == 'in' and isinstance(value, list):
-                                values_str = ','.join([f"'{v}'" for v in value])
-                                where_conditions.append(f"{field} {sql_op} ({values_str})")
-                            elif op == 'is':
-                                where_conditions.append(f"{field} {sql_op} {value}")
-                            else:
-                                where_conditions.append(f"{field} {sql_op} '{value}'")
-                                
-                        if where_conditions:
-                            sql_query += " WHERE " + " AND ".join(where_conditions)
-                    
-                    sql_query += " RETURNING *;"
-                    
-                    # Try SQL endpoint
-                    rpc_url = f"{supabase_url}/rest/v1/rpc/exec_sql"
-                    rpc_response = requests.post(
-                        rpc_url,
-                        headers=headers,
-                        json={"query": sql_query},
-                        timeout=10
-                    )
-                    
-                    if rpc_response.status_code < 300:
-                        response = rpc_response
-                    else:
-                        print(f"SQL update failed: {rpc_response.status_code} - {rpc_response.text}")
+                if response.status_code < 300:
+                    return response.json()
+                else:
+                    print(f"Direct API update failed: {response.status_code} - {response.text}")
+                    return None
             except requests.RequestException as e:
                 print(f"Network error in direct REST API update: {str(e)}")
-                class MockResponse:
-                    def __init__(self):
-                        self.data = []
-                return MockResponse()
-            
+                return None
+        
         elif query_type == 'delete':
-            # Apply filters to the URL for delete
-            if filters:
-                for field, op, value in filters:
-                    if op == 'eq':
-                        url += f"?{field}=eq.{value}"
-                        break
-            
             try:
                 response = requests.delete(url, headers=headers)
-                
-                # If first attempt fails with 403, try with SQL
-                if response.status_code == 403 and 'permission denied' in response.text.lower():
-                    print(f"Permission denied on delete, trying SQL endpoint...")
-                    
-                    # Build delete SQL
-                    sql_query = f"DELETE FROM {table_name}"
-                    
-                    # Add where clause from filters
-                    if filters:
-                        where_conditions = []
-                        for field, op, value in filters:
-                            sql_op = {
-                                'eq': '=',
-                                'neq': '!=',
-                                'gt': '>',
-                                'lt': '<',
-                                'gte': '>=',
-                                'lte': '<=',
-                                'like': 'LIKE',
-                                'ilike': 'ILIKE',
-                                'in': 'IN',
-                                'is': 'IS'
-                            }.get(op, '=')
-                            
-                            if op == 'in' and isinstance(value, list):
-                                values_str = ','.join([f"'{v}'" for v in value])
-                                where_conditions.append(f"{field} {sql_op} ({values_str})")
-                            elif op == 'is':
-                                where_conditions.append(f"{field} {sql_op} {value}")
-                            else:
-                                where_conditions.append(f"{field} {sql_op} '{value}'")
-                                
-                        if where_conditions:
-                            sql_query += " WHERE " + " AND ".join(where_conditions)
-                    
-                    sql_query += " RETURNING *;"
-                    
-                    # Try SQL endpoint
-                    rpc_url = f"{supabase_url}/rest/v1/rpc/exec_sql"
-                    rpc_response = requests.post(
-                        rpc_url,
-                        headers=headers,
-                        json={"query": sql_query},
-                        timeout=10
-                    )
-                    
-                    if rpc_response.status_code < 300:
-                        response = rpc_response
-                    else:
-                        print(f"SQL delete failed: {rpc_response.status_code} - {rpc_response.text}")
+                if response.status_code < 300:
+                    return response.json()
+                else:
+                    print(f"Direct API delete failed: {response.status_code} - {response.text}")
+                    return None
             except requests.RequestException as e:
                 print(f"Network error in direct REST API delete: {str(e)}")
-                class MockResponse:
-                    def __init__(self):
-                        self.data = []
-                return MockResponse()
-            
+                return None
+        
         else:
             print(f"ERROR: Invalid query type: {query_type}")
             return None
-            
-        # Check if successful
-        if response.status_code < 300:
-            # Create a response object compatible with Supabase client
-            class RestResponse:
-                def __init__(self, data):
-                    self.data = data
-                    
-            if query_type == 'select':
-                return RestResponse(response.json())
-            else:
-                # For insert/update/delete, just return the raw response if needed
-                return RestResponse(response.json() if response.text else [])
-        else:
-            print(f"REST API error: {response.status_code} - {response.text}")
-            
-            # Return mock response with empty data if query failed
-            class MockResponse:
-                def __init__(self):
-                    self.data = []
-                    
-            return MockResponse()
-            
+    
     except Exception as e:
-        print(f"REST API call error: {str(e)}")
-        
-        # Return mock response with empty data
-        class MockResponse:
-            def __init__(self):
-                self.data = []
-                
-        return MockResponse()
+        print(f"Direct API call error: {str(e)}")
+        return None
 
 # File upload configurations
 UPLOAD_FOLDER = 'static/uploads'

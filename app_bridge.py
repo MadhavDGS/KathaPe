@@ -9,6 +9,16 @@ import importlib.util
 
 print("Starting app_bridge.py...")
 
+# Try to import and apply DNS patches for Supabase connectivity
+try:
+    import patches
+    patches.apply_patches()
+    print("Applied DNS resolution patches for Supabase")
+except ImportError:
+    print("DNS patches module not found, continuing without DNS patches")
+except Exception as e:
+    print(f"Error applying DNS patches: {str(e)}")
+
 # The app.py file (not the app directory)
 app_py_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app.py')
 print(f"Looking for app.py at: {app_py_path}")
