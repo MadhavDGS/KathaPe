@@ -57,6 +57,11 @@ os.makedirs(upload_folder, exist_ok=True)
 qr_folder = 'static/qr_codes'
 os.makedirs(qr_folder, exist_ok=True)
 
+# Set up file upload configuration
+app.config['UPLOAD_FOLDER'] = upload_folder
+app.config['QR_CODES_FOLDER'] = qr_folder
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+
 # Retry settings for database connections
 DB_RETRY_ATTEMPTS = 3
 DB_RETRY_DELAY = 1  # seconds
@@ -70,6 +75,20 @@ supabase_admin_client = None
 create_client = None
 if SUPABASE_AVAILABLE:
     from supabase import create_client, Client
+
+# Utility function to ensure valid UUIDs
+def safe_uuid(id_value):
+    """Ensure a value is a valid UUID string or generate a new one"""
+    if not id_value:
+        return str(uuid.uuid4())
+    
+    try:
+        # Test if it's a valid UUID
+        uuid.UUID(str(id_value))
+        return str(id_value)
+    except (ValueError, TypeError, AttributeError) as e:
+        print(f"WARNING: Invalid UUID '{id_value}' - generating new UUID")
+        return str(uuid.uuid4())
 
 # Supabase client function
 def get_supabase_client():
@@ -168,6 +187,12 @@ def get_supabase_admin_client():
         print("Falling back to mock data system")
         return None
 
+# File upload helper function
+def allowed_file(filename):
+    """Check if a file has an allowed extension"""
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
 # Safe query wrapper for Supabase - direct implementation to avoid imported function issues
 def query_table(table_name, query_type='select', fields='*', filters=None, data=None):
     """
@@ -188,6 +213,9 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             # Apply filters
             if filters:
                 for field, op, value in filters:
+                    if field.endswith('_id') and value:
+                        value = safe_uuid(value)
+                        
                     if op == 'eq':
                         query = query.eq(field, value)
                     elif op == 'neq':
@@ -198,6 +226,12 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             return result
         
         elif query_type == 'insert':
+            # Ensure UUID fields are valid
+            if data and isinstance(data, dict):
+                for key, value in data.items():
+                    if key == 'id' or key.endswith('_id'):
+                        data[key] = safe_uuid(value)
+                        
             result = client.table(table_name).insert(data).execute()
             return result
             
@@ -207,6 +241,9 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             # Apply filters
             if filters:
                 for field, op, value in filters:
+                    if field.endswith('_id'):
+                        value = safe_uuid(value)
+                        
                     if op == 'eq':
                         query = query.eq(field, value)
                     # Add other operators as needed
@@ -220,6 +257,9 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             # Apply filters
             if filters:
                 for field, op, value in filters:
+                    if field.endswith('_id'):
+                        value = safe_uuid(value)
+                        
                     if op == 'eq':
                         query = query.eq(field, value)
                     # Add other operators as needed
