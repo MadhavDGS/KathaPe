@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Khata</title>
+    <style>
+        body { 
+            background: #121212; 
+            color: white; 
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { 
+            color: #2ecc71; 
+        }
+        a { 
+            color: #2ecc71; 
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Khata</h1>
+        <p>Your all-in-one solution for managing business transactions</p>
+        
+        <div>
+            <h2>Choose Your Role</h2>
+            <div>
+                <h3>Business Owner</h3>
+                <p>Manage your shop's transactions and customer credits</p>
+                <p>
+                    <a href="/auth/login?user_type=business">Login as Business</a> |
+                    <a href="/auth/register?user_type=business">Register as Business</a>
+                </p>
+            </div>
+            
+            <div>
+                <h3>Customer</h3>
+                <p>View and manage your credits with local shops</p>
+                <p>
+                    <a href="/auth/login?user_type=customer">Login as Customer</a> |
+                    <a href="/auth/register?user_type=customer">Register as Customer</a>
+                </p>
+            </div>
+        </div>
+        
+        <div>
+            <h2>Features</h2>
+            <ul>
+                <li>Track Transactions</li>
+                <li>Manage Multiple Businesses</li>
+                <li>Mobile First Design</li>
+            </ul>
+        </div>
+        
+        <p>Test pages:</p>
+        <ul>
+            <li><a href="/test">Test Page</a></li>
+            <li><a href="/dark">Guaranteed Dark Page</a></li>
+            <li><a href="/ultra">Ultra Simple Page</a></li>
+            <li><a href="/dark-index">Dark Index</a></li>
+        </ul>
+    </div>
+</body>
+</html> 

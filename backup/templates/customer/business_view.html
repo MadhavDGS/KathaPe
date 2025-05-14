@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}{{ business.name }}{% endblock %}
+
+{% block header_title %}{{ business.name }}{% endblock %}
+
+{% block content %}
+<div class="profile-section">
+    <div class="profile-image">
+        {% if business.profile_photo_url %}
+            <img src="{{ business.profile_photo_url }}" alt="Business Profile">
+        {% else %}
+            <div class="placeholder">
+                <i class="fas fa-store"></i>
+            </div>
+        {% endif %}
+    </div>
+    <div class="profile-info">
+        <h2>{{ business.name }}</h2>
+        <div class="balance-info">
+            <span class="balance-label">Balance:</span>
+            <span class="balance-value {% if customer.current_balance < 0 %}positive{% endif %}">
+                ₹{{ customer.current_balance|abs }}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="action-buttons">
+    <a href="{{ url_for('customer_transaction') }}" class="btn btn-accent">
+        <i class="fas fa-money-bill-wave"></i> Make Payment
+    </a>
+</div>
+
+<h3 class="section-title">Transaction History</h3>
+
+<div class="chat-container">
+    {% if transactions %}
+        {% for transaction in transactions %}
+            <div class="chat-message {% if transaction.transaction_type == 'credit' %}credit{% else %}payment{% endif %}">
+                <div class="chat-message-content">
+                    <div class="chat-message-amount">
+                        {% if transaction.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ transaction.amount }}
+                    </div>
+                    {% if transaction.notes %}
+                        <div class="chat-message-notes">{{ transaction.notes }}</div>
+                    {% endif %}
+                    <div class="chat-message-time">{{ transaction.created_at|datetime }}</div>
+                    
+                    {% if transaction.media_attachments %}
+                        <div class="chat-message-attachments">
+                            {% for media in transaction.media_attachments %}
+                                <a href="{{ media.media_url }}" class="media-attachment" target="_blank">
+                                    <i class="fas fa-file-image"></i> View Receipt
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-receipt"></i>
+            <p>No transactions yet.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.balance-info {
+    display: flex;
+    align-items: center;
+    margin-top: 5px;
+}
+
+.balance-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-right: 5px;
+}
+
+.balance-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--credit-red);
+}
+
+.balance-value.positive {
+    color: var(--payment-green);
+}
+
+.action-buttons {
+    margin: 20px 0;
+}
+
+.chat-container {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-message {
+    max-width: 80%;
+    margin-bottom: 15px;
+    border-radius: 15px;
+    padding: 12px;
+    position: relative;
+}
+
+.chat-message.credit {
+    background-color: rgba(244, 67, 54, 0.1);
+    align-self: flex-start;
+    border-top-left-radius: 0;
+}
+
+.chat-message.payment {
+    background-color: rgba(76, 175, 80, 0.1);
+    align-self: flex-end;
+    border-top-right-radius: 0;
+}
+
+.chat-message-amount {
+    font-weight: 700;
+    font-size: 1.2rem;
+    margin-bottom: 5px;
+}
+
+.chat-message.credit .chat-message-amount {
+    color: var(--credit-red);
+}
+
+.chat-message.payment .chat-message-amount {
+    color: var(--payment-green);
+}
+
+.chat-message-notes {
+    margin-bottom: 10px;
+}
+
+.chat-message-time {
+    font-size: 0.8rem;
+    color: #666;
+    text-align: right;
+}
+
+.chat-message-attachments {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+.media-attachment {
+    display: inline-flex;
+    align-items: center;
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.media-attachment i {
+    margin-right: 5px;
+}
+{% endblock %} 

@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block header_title %}Home{% endblock %}
+
+{% block inline_css %}
+.customer-dashboard {
+    padding-bottom: 30px;
+}
+
+.profile-section {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24px;
+    background-color: var(--card-bg);
+    padding: 24px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.profile-section:after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 150px;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgba(92, 103, 222, 0.08));
+    z-index: 1;
+    pointer-events: none;
+}
+
+.profile-section:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+}
+
+.profile-image {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 20px;
+    background-color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2.2rem;
+    box-shadow: 0 5px 15px rgba(92, 103, 222, 0.3);
+    border: 3px solid rgba(255, 255, 255, 0.2);
+}
+
+.profile-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-image .placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-info h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.phone-number {
+    color: var(--primary-color);
+    margin: 8px 0 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.phone-number i {
+    margin-right: 8px;
+    font-size: 0.9rem;
+}
+
+.dashboard-section {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 24px;
+    margin-bottom: 24px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.dashboard-section:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.12);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 22px;
+}
+
+.section-title {
+    margin: 0;
+    color: var(--text-color);
+    font-weight: 700;
+    font-size: 1.25rem;
+    position: relative;
+    padding-left: 14px;
+}
+
+.section-title:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 18px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.add-business-btn {
+    display: inline-flex;
+    align-items: center;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 10px 18px;
+    border-radius: 24px;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: all 0.3s;
+    box-shadow: 0 4px 10px rgba(92, 103, 222, 0.3);
+}
+
+.add-business-btn i {
+    margin-right: 8px;
+}
+
+.add-business-btn:hover {
+    background-color: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(92, 103, 222, 0.4);
+}
+
+.businesses-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.business-card {
+    text-decoration: none;
+    color: var(--text-color);
+    transition: transform 0.3s;
+}
+
+.business-card-inner {
+    background-color: rgba(255, 255, 255, 0.5);
+    padding: 18px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--input-border);
+    transition: all 0.3s;
+}
+
+.business-card:hover .business-card-inner {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+    border-color: rgba(92, 103, 222, 0.3);
+}
+
+.business-icon {
+    width: 56px;
+    height: 56px;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-right: 18px;
+    box-shadow: 0 5px 10px rgba(92, 103, 222, 0.2);
+}
+
+.business-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.business-info {
+    flex: 1;
+}
+
+.business-name {
+    font-weight: 700;
+    font-size: 1.15rem;
+    margin-bottom: 6px;
+}
+
+.business-balance {
+    color: var(--credit-color);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.business-balance:before {
+    content: '\f53a'; /* fa-rupee-sign */
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    margin-right: 5px;
+    font-size: 0.9rem;
+}
+
+.business-balance.positive {
+    color: var(--payment-color);
+}
+
+.business-arrow {
+    color: var(--primary-color);
+    font-size: 1.2rem;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(92, 103, 222, 0.1);
+    transition: all 0.3s;
+}
+
+.business-card:hover .business-arrow {
+    background-color: var(--primary-color);
+    color: white;
+    transform: translateX(3px);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 0;
+}
+
+.empty-state i {
+    font-size: 3.5rem;
+    color: var(--primary-color);
+    opacity: 0.4;
+    margin-bottom: 20px;
+}
+
+.empty-state p {
+    margin-bottom: 24px;
+    color: var(--text-color);
+    opacity: 0.7;
+    font-size: 1.1rem;
+}
+
+.quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 18px;
+}
+
+.quick-link-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 22px 15px;
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 14px;
+    text-decoration: none;
+    color: var(--text-color);
+    border: 1px solid var(--input-border);
+    transition: all 0.3s;
+}
+
+.quick-link-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    border-color: rgba(92, 103, 222, 0.3);
+}
+
+.quick-link-icon {
+    font-size: 2.2rem;
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(92, 103, 222, 0.1);
+    transition: all 0.3s;
+}
+
+.quick-link-card:hover .quick-link-icon {
+    background-color: var(--primary-color);
+    color: white;
+    transform: scale(1.05);
+}
+
+.quick-link-text {
+    font-weight: 600;
+    text-align: center;
+}
+
+[data-theme="dark"] .business-card-inner,
+[data-theme="dark"] .quick-link-card {
+    background-color: rgba(40, 40, 40, 0.5);
+}
+
+@media (max-width: 768px) {
+    .profile-section {
+        padding: 20px;
+    }
+    
+    .profile-image {
+        width: 80px;
+        height: 80px;
+        font-size: 2rem;
+    }
+    
+    .profile-info h2 {
+        font-size: 1.4rem;
+    }
+    
+    .dashboard-section {
+        padding: 20px;
+    }
+    
+    .section-title {
+        font-size: 1.2rem;
+    }
+    
+    .business-icon {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .business-card-inner {
+        padding: 15px;
+    }
+    
+    .quick-link-icon {
+        width: 60px;
+        height: 60px;
+        font-size: 1.8rem;
+    }
+}
+{% endblock %}
+
+{% block content %}
+<div class="customer-dashboard">
+    <div class="profile-section">
+        <div class="profile-image">
+            {% if session.get('profile_photo_url') %}
+                <img src="{{ session.get('profile_photo_url') }}" alt="Profile">
+            {% else %}
+                <div class="placeholder">
+                    <i class="fas fa-user"></i>
+                </div>
+            {% endif %}
+        </div>
+        <div class="profile-info">
+            <h2>{{ session.get('user_name') }}</h2>
+            <p class="phone-number"><i class="fas fa-phone-alt"></i> {{ session.get('phone_number') }}</p>
+        </div>
+    </div>
+
+    <div class="dashboard-section">
+        <div class="section-header">
+            <h3 class="section-title">Your Businesses</h3>
+            <a href="{{ url_for('select_business') }}" class="add-business-btn">
+                <i class="fas fa-plus"></i> Add Business
+            </a>
+        </div>
+
+        {% if businesses %}
+            <div class="businesses-list">
+                {% for business in businesses %}
+                    <a href="{{ url_for('customer_business_view', business_id=business.id) }}" class="business-card">
+                        <div class="business-card-inner">
+                            <div class="business-icon">
+                                {% if business.profile_photo_url %}
+                                    <img src="{{ business.profile_photo_url }}" alt="{{ business.name }}">
+                                {% else %}
+                                    <i class="fas fa-store"></i>
+                                {% endif %}
+                            </div>
+                            <div class="business-info">
+                                <div class="business-name">{{ business.name }}</div>
+                                <div class="business-balance {% if business.current_balance < 0 %}positive{% endif %}">
+                                    Balance: {{ business.current_balance|abs }}
+                                </div>
+                            </div>
+                            <div class="business-arrow">
+                                <i class="fas fa-chevron-right"></i>
+                            </div>
+                        </div>
+                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="fas fa-store-slash"></i>
+                <p>You haven't connected with any businesses yet.</p>
+                <a href="{{ url_for('select_business') }}" class="btn primary-btn">
+                    <i class="fas fa-plus"></i> Connect with a Business
+                </a>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="dashboard-section">
+        <div class="section-header">
+            <h3 class="section-title">Quick Links</h3>
+        </div>
+        <div class="quick-links">
+            <a href="{{ url_for('scan_qr') }}" class="quick-link-card">
+                <div class="quick-link-icon">
+                    <i class="fas fa-qrcode"></i>
+                </div>
+                <div class="quick-link-text">Scan QR Code</div>
+            </a>
+            <a href="{{ url_for('customer_profile') }}" class="quick-link-card">
+                <div class="quick-link-icon">
+                    <i class="fas fa-user-cog"></i>
+                </div>
+                <div class="quick-link-text">Edit Profile</div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

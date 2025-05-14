@@ -1,0 +1,134 @@
+/* Dark Theme CSS for Katha */
+:root {
+    --dark-bg: #1e1e2f;
+    --dark-card-bg: #27293d;
+    --dark-accent: #1d8cf8;
+    --dark-text: #e2e2e2;
+    --dark-secondary-text: #a9a9a9;
+    --dark-border: #2b3553;
+    --dark-input-bg: #242632;
+    --dark-shadow: 0 2px 15px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-theme {
+    background-color: var(--dark-bg);
+    color: var(--dark-text);
+}
+
+/* Navigation */
+body.dark-theme .navbar {
+    background-color: var(--dark-card-bg);
+    border-color: var(--dark-border);
+    box-shadow: var(--dark-shadow);
+}
+
+body.dark-theme .navbar a {
+    color: var(--dark-text);
+}
+
+body.dark-theme .navbar a:hover {
+    color: var(--dark-accent);
+}
+
+/* Cards and containers */
+body.dark-theme .card,
+body.dark-theme .auth-form,
+body.dark-theme .stat-card {
+    background-color: var(--dark-card-bg);
+    border-color: var(--dark-border);
+    box-shadow: var(--dark-shadow);
+}
+
+body.dark-theme .card-header {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-color: var(--dark-border);
+}
+
+/* Form elements */
+body.dark-theme .form-control {
+    background-color: var(--dark-input-bg);
+    border-color: var(--dark-border);
+    color: var(--dark-text);
+}
+
+body.dark-theme .form-control:focus {
+    border-color: var(--dark-accent);
+}
+
+/* Tables */
+body.dark-theme .table {
+    color: var(--dark-text);
+}
+
+body.dark-theme .table th,
+body.dark-theme .table td {
+    border-color: var(--dark-border);
+}
+
+body.dark-theme .table thead th {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-color: var(--dark-border);
+}
+
+/* QR Code */
+body.dark-theme .qr-image {
+    border-color: var(--dark-border);
+    background-color: var(--dark-card-bg);
+}
+
+/* Alert boxes */
+body.dark-theme .alert-success {
+    background-color: rgba(40, 167, 69, 0.2);
+    border-color: rgba(40, 167, 69, 0.3);
+    color: #8fd19e;
+}
+
+body.dark-theme .alert-danger {
+    background-color: rgba(220, 53, 69, 0.2);
+    border-color: rgba(220, 53, 69, 0.3);
+    color: #f1aeb5;
+}
+
+body.dark-theme .alert-warning {
+    background-color: rgba(255, 193, 7, 0.2);
+    border-color: rgba(255, 193, 7, 0.3);
+    color: #ffe083;
+}
+
+/* Typography */
+body.dark-theme h1, 
+body.dark-theme h2, 
+body.dark-theme h3, 
+body.dark-theme h4, 
+body.dark-theme h5, 
+body.dark-theme h6 {
+    color: var(--dark-text);
+}
+
+body.dark-theme .stat-label {
+    color: var(--dark-secondary-text);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 99;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: var(--dark-card-bg);
+    color: var(--dark-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--dark-shadow);
+    border: none;
+    transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.1);
+} 

@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Details{% endblock %}
+
+{% block header_title %}Customer Details{% endblock %}
+
+{% block content %}
+<div class="section-actions">
+    <a href="{{ url_for('business_customers') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Customers
+    </a>
+    <a href="{{ url_for('business_transactions', customer_id=customer.get('id')) }}" class="btn btn-primary">
+        <i class="fas fa-plus-circle"></i> Add Transaction
+    </a>
+</div>
+
+<div class="customer-container">
+    <div class="customer-profile">
+        <div class="profile-avatar">
+            {% if customer.get('profile_photo_url') %}
+                <img src="{{ customer.get('profile_photo_url') }}" alt="{{ customer.get('name', '') }}">
+            {% else %}
+                <div class="avatar-placeholder">
+                    {{ customer.get('name', '')[0]|upper if customer.get('name') else 'C' }}
+                </div>
+            {% endif %}
+        </div>
+        <div class="profile-info">
+            <h2 class="profile-name">{{ customer.get('name', '') }}</h2>
+            <div class="profile-phone">
+                <i class="fas fa-phone"></i>
+                <span>{{ customer.get('phone_number', '') }}</span>
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <a href="{{ url_for('remind_customer', customer_id=customer.get('id')) }}" class="action-button whatsapp">
+                <i class="fab fa-whatsapp"></i>
+                <span>Send Reminder</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="summary-cards">
+        <div class="summary-card credit-card">
+            <div class="summary-label">YOU GAVE</div>
+            <div class="summary-amount">₹{{ credit_total|default(0) }}</div>
+        </div>
+        <div class="summary-card balance-card">
+            <div class="summary-label">CUSTOMER SHOULD GIVE</div>
+            <div class="summary-amount">₹{{ customer.get('current_balance', 0)|abs }}</div>
+        </div>
+    </div>
+
+    <h3 class="section-title">Transaction History</h3>
+
+    <div class="transaction-history">
+        {% if transactions %}
+            {% for transaction in transactions %}
+                <div class="transaction-row">
+                    <div class="transaction-icon">
+                        {% if transaction.get('transaction_type') == 'credit' %}
+                            <i class="fas fa-arrow-up"></i>
+                        {% else %}
+                            <i class="fas fa-arrow-down"></i>
+                        {% endif %}
+                    </div>
+                    {% if transaction.get('notes') %}
+                        <div class="transaction-notes">
+                            {{ transaction.get('notes', '') }}
+                        </div>
+                    {% endif %}
+                    <div class="transaction-date">
+                        {{ transaction.get('created_at', '')|datetime }}
+                    </div>
+                    <div class="transaction-amount {% if transaction.get('transaction_type') == 'credit' %}credit{% else %}payment{% endif %}">
+                        {% if transaction.get('transaction_type') == 'credit' %}
+                            +₹{{ transaction.get('amount', 0) }}
+                        {% else %}
+                            -₹{{ transaction.get('amount', 0) }}
+                        {% endif %}
+                    </div>
+                    {% if transaction.get('media_url') %}
+                        <div class="transaction-receipt">
+                            <a href="{{ transaction.get('media_url') }}" target="_blank" class="receipt-link">
+                                <i class="fas fa-receipt"></i>
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <p>No transactions yet</p>
+                <a href="{{ url_for('business_transactions', customer_id=customer.get('id')) }}" class="btn btn-primary">Add first transaction</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.section-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.customer-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.customer-profile {
+    display: flex;
+    align-items: center;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.profile-avatar {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 20px;
+    background-color: var(--primary-color);
+}
+
+.profile-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+    color: white;
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-name {
+    margin: 0 0 5px;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.profile-phone {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+.profile-phone i {
+    margin-right: 8px;
+}
+
+.action-buttons {
+    margin-left: auto;
+}
+
+.action-button {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    border-radius: 25px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.action-button i {
+    margin-right: 8px;
+}
+
+.action-button.whatsapp {
+    background-color: #25D366;
+    color: white;
+}
+
+.action-button.whatsapp:hover {
+    background-color: #128C7E;
+}
+
+.summary-cards {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.summary-card {
+    flex: 1;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 15px;
+    box-shadow: var(--box-shadow);
+    text-align: center;
+}
+
+.credit-card {
+    border-top: 3px solid var(--credit-color);
+}
+
+.balance-card {
+    border-top: 3px solid var(--payment-color);
+}
+
+.summary-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.summary-amount {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.section-title {
+    margin: 30px 0 15px;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.transaction-history {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+}
+
+.transaction-row {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.transaction-row:last-child {
+    border-bottom: none;
+}
+
+.transaction-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+}
+
+.transaction-icon .fa-arrow-up {
+    color: var(--credit-color);
+}
+
+.transaction-icon .fa-arrow-down {
+    color: var(--payment-color);
+}
+
+.transaction-notes {
+    flex: 1;
+    font-size: 0.95rem;
+    color: var(--text-color);
+}
+
+.transaction-date {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-right: 15px;
+}
+
+.transaction-amount {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-right: 10px;
+}
+
+.transaction-amount.credit {
+    color: var(--credit-color);
+}
+
+.transaction-amount.payment {
+    color: var(--payment-color);
+}
+
+.transaction-receipt {
+    margin-left: 10px;
+}
+
+.receipt-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 0;
+    color: var(--text-muted);
+}
+
+.empty-state p {
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.btn {
+    padding: 8px 15px;
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-color);
+}
+
+.btn-secondary {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+@media (max-width: 768px) {
+    .customer-profile {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .profile-avatar {
+        margin: 0 0 15px 0;
+    }
+    
+    .action-buttons {
+        margin: 15px 0 0;
+    }
+    
+    .summary-cards {
+        flex-direction: column;
+    }
+}
+{% endblock %} 

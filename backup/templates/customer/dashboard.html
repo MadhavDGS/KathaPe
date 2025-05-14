@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block header_title %}Home{% endblock %}
+
+{% block content %}
+<div class="profile-section">
+    <div class="profile-image">
+        {% if session.get('profile_photo_url') %}
+            <img src="{{ session.get('profile_photo_url') }}" alt="Profile">
+        {% else %}
+            <div class="placeholder">
+                <i class="fas fa-user"></i>
+            </div>
+        {% endif %}
+    </div>
+    <div class="profile-info">
+        <h2>{{ session.get('user_name') }}</h2>
+        <p>{{ session.get('phone_number') }}</p>
+    </div>
+</div>
+
+<h3 class="section-title">Your Businesses</h3>
+
+{% if businesses %}
+    <div class="businesses-list">
+        {% for business in businesses %}
+            <a href="{{ url_for('customer_business_view', business_id=business.id) }}" class="business-card">
+                <div class="business-info">
+                    <div class="business-name">{{ business.name }}</div>
+                </div>
+                <div class="business-balance {% if business.current_balance < 0 %}positive{% endif %}">
+                    ₹{{ business.current_balance|abs }}
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <i class="fas fa-store-slash"></i>
+        <p>You haven't connected with any businesses yet.</p>
+    </div>
+{% endif %}
+
+<a href="{{ url_for('select_business') }}" class="add-business-btn">
+    <i class="fas fa-plus"></i> Add Business
+</a>
+{% endblock %} 

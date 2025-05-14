@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+
+{% block title %}Customer Profile{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Your Profile</h1>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('customer_profile') }}" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ customer.name }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="phone" class="form-label">Phone Number</label>
+                    <input type="text" class="form-control" id="phone" name="phone" value="{{ customer.phone_number }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="whatsapp" class="form-label">WhatsApp Number</label>
+                    <input type="text" class="form-control" id="whatsapp" name="whatsapp" value="{{ customer.whatsapp_number or '' }}">
+                    <small class="text-muted">Include country code (e.g., +91)</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="email" name="email" value="{{ customer.email or '' }}">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="address" class="form-label">Address</label>
+                    <textarea class="form-control" id="address" name="address" rows="3">{{ customer.address or '' }}</textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="profile_photo" class="form-label">Profile Photo</label>
+                    <input type="file" class="form-control" id="profile_photo" name="profile_photo">
+                    {% if customer.profile_photo_url %}
+                    <div class="mt-2">
+                        <img src="{{ customer.profile_photo_url }}" class="img-thumbnail" style="max-width: 200px;">
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <a href="{{ url_for('customer_dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Add New Customer{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Blue theme for business interfaces */
+    body {
+        background-color: #f0f8ff;
+    }
+    
+    .card {
+        background-color: #ffffff;
+        border-color: #4682b4;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    .card-header {
+        background-color: #4682b4;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .btn-primary {
+        background-color: #4682b4;
+        border-color: #4682b4;
+    }
+    
+    .btn-primary:hover {
+        background-color: #36648b;
+        border-color: #36648b;
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: #36648b;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Add New Customer</h4>
+                </div>
+                <div class="card-body">
+                    {% if error %}
+                    <div class="alert alert-danger">{{ error }}</div>
+                    {% endif %}
+                    
+                    <form method="POST" action="{{ url_for('main.add_customer') }}">
+                        <div class="mb-3">
+                            <label for="business_id" class="form-label">Select Business</label>
+                            <select class="form-select" id="business_id" name="business_id" required>
+                                <option value="">Choose a business...</option>
+                                {% for business in businesses %}
+                                <option value="{{ business.id }}">{{ business.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="customer_name" class="form-label">Customer Name</label>
+                            <input type="text" class="form-control" id="customer_name" name="customer_name" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email (Optional)</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Address (Optional)</label>
+                            <textarea class="form-control" id="address" name="address" rows="2"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="initial_credit" class="form-label">Initial Credit Amount (if any)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" class="form-control" id="initial_credit" name="initial_credit" value="0" min="0" step="0.01">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Additional Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Add Customer</button>
+                            <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

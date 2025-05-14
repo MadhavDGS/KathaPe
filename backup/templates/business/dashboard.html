@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Business Dashboard{% endblock %}
+
+{% block header_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="profile-section">
+    <div class="profile-image">
+        {% if business.profile_photo_url %}
+            <img src="{{ business.profile_photo_url }}" alt="Business Profile">
+        {% else %}
+            <div class="placeholder">
+                <i class="fas fa-store"></i>
+            </div>
+        {% endif %}
+    </div>
+    <div class="profile-info">
+        <h2>{{ business.name }}</h2>
+        <p>{{ business.description }}</p>
+    </div>
+</div>
+
+<div class="connect-info-section">
+    <div class="connect-card">
+        <div class="connect-header">
+            <h3>Customer Connection Details</h3>
+            <p>Share these details with your customers to connect with your business</p>
+        </div>
+        <div class="connect-content">
+            <div class="pin-display">
+                <span class="label">Your Business PIN:</span>
+                <span class="pin">{{ business.access_pin }}</span>
+            </div>
+            
+            <div class="qr-code-container">
+                <div class="qr-code">
+                    <img src="{{ url_for('business_qr_image', business_id=business.id) }}" alt="Business QR Code" onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/placeholder_qr.png') }}';">
+                </div>
+                <p class="qr-info">Scan this QR code to connect with {{ business.name }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <div class="summary-card-title">Total Customers</div>
+        <div class="summary-card-value">{{ summary.total_customers }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-card-title">Total Credit</div>
+        <div class="summary-card-value">₹{{ summary.total_credit }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-card-title">Total Payments</div>
+        <div class="summary-card-value">₹{{ summary.total_payments }}</div>
+    </div>
+</div>
+
+<div class="section-actions">
+    <a href="{{ url_for('business_customers') }}" class="btn btn-accent">
+        <i class="fas fa-users"></i> View Customers
+    </a>
+    <a href="{{ url_for('add_customer') }}" class="btn btn-green">
+        <i class="fas fa-user-plus"></i> Add Customer
+    </a>
+</div>
+
+<h3 class="section-title">Recent Transactions</h3>
+
+{% if transactions %}
+    <div class="transaction-list">
+        {% for transaction in transactions %}
+            <div class="transaction-item transaction-{{ transaction.transaction_type }}">
+                <div class="transaction-info">
+                    <div class="transaction-name">{{ transaction.customer_name }}</div>
+                    <div class="transaction-date">{{ transaction.created_at|datetime }}</div>
+                </div>
+                <div class="transaction-amount {{ transaction.transaction_type }}">
+                    {% if transaction.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ transaction.amount }}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <i class="fas fa-receipt"></i>
+        <p>No transactions yet.</p>
+    </div>
+{% endif %}
+
+{% endblock %}
+
+{% block inline_css %}
+.section-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 30px;
+    margin-top: 20px;
+}
+
+.transaction-info {
+    flex: 1;
+}
+
+.transaction-name {
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.transaction-date {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+/* Connect Info Styling */
+.connect-info-section {
+    margin: 20px 0;
+}
+
+.connect-card {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.connect-header {
+    padding: 15px;
+    background-color: var(--accent-color);
+    color: var(--white);
+}
+
+.connect-header h3 {
+    margin: 0 0 5px;
+    font-size: 1.2rem;
+}
+
+.connect-header p {
+    margin: 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.connect-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.pin-display {
+    margin-bottom: 20px;
+    background-color: var(--light-background);
+    padding: 10px 20px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.label {
+    font-weight: 500;
+    margin-right: 10px;
+}
+
+.pin {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    letter-spacing: 2px;
+}
+
+.qr-code-container {
+    text-align: center;
+}
+
+.qr-code {
+    background-color: white;
+    padding: 15px;
+    display: inline-block;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.qr-code img {
+    width: 200px;
+    height: 200px;
+}
+
+.qr-info {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 5px 0;
+}
+{% endblock %} 

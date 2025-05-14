@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Details{% endblock %}
+
+{% block header_title %}Customer Details{% endblock %}
+
+{% block content %}
+<div class="section-actions">
+    <a href="{{ url_for('business_customers') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Customers
+    </a>
+    <a href="{{ url_for('business_transactions', customer_id=customer.id) }}" class="btn btn-primary">
+        <i class="fas fa-plus-circle"></i> Add Transaction
+    </a>
+</div>
+
+<div class="customer-profile">
+    <div class="profile-header">
+        <div class="profile-avatar">
+            {% if customer.profile_photo_url %}
+                <img src="{{ customer.profile_photo_url }}" alt="{{ customer.name }}">
+            {% else %}
+                <div class="avatar-placeholder">
+                    {{ customer.name[0]|upper }}
+                </div>
+            {% endif %}
+        </div>
+        <div class="profile-info">
+            <h2 class="profile-name">{{ customer.name }}</h2>
+            <div class="profile-details">
+                <div class="detail-item">
+                    <i class="fas fa-phone"></i>
+                    <span>{{ customer.phone_number }}</span>
+                </div>
+                {% if customer.email %}
+                <div class="detail-item">
+                    <i class="fas fa-envelope"></i>
+                    <span>{{ customer.email }}</span>
+                </div>
+                {% endif %}
+                {% if customer.address %}
+                <div class="detail-item">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span>{{ customer.address }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="balance-card">
+            <div class="balance-label">Current Balance</div>
+            <div class="balance-amount">₹{{ customer.current_balance }}</div>
+            <div class="balance-updated">Last updated: {{ customer.updated_at|datetime }}</div>
+        </div>
+    </div>
+    
+    <div class="action-buttons">
+        <a href="{{ url_for('remind_customer', customer_id=customer.id) }}" class="action-button whatsapp">
+            <i class="fab fa-whatsapp"></i>
+            <span>Send Reminder</span>
+        </a>
+    </div>
+</div>
+
+<h3 class="section-title">Transaction History</h3>
+
+{% if transactions %}
+    <div class="transaction-history">
+        {% for transaction in transactions %}
+            <div class="transaction-item transaction-{{ transaction.transaction_type }}">
+                <div class="transaction-icon">
+                    {% if transaction.transaction_type == 'credit' %}
+                        <i class="fas fa-arrow-up"></i>
+                    {% else %}
+                        <i class="fas fa-arrow-down"></i>
+                    {% endif %}
+                </div>
+                <div class="transaction-details">
+                    <div class="transaction-date">{{ transaction.created_at|datetime }}</div>
+                    {% if transaction.notes %}
+                        <div class="transaction-notes">{{ transaction.notes }}</div>
+                    {% endif %}
+                </div>
+                <div class="transaction-amount">
+                    {% if transaction.transaction_type == 'credit' %}
+                        +₹{{ transaction.amount }}
+                    {% else %}
+                        -₹{{ transaction.amount }}
+                    {% endif %}
+                </div>
+                {% if transaction.media_url %}
+                    <div class="transaction-receipt">
+                        <a href="{{ transaction.media_url }}" target="_blank" class="receipt-link">
+                            <i class="fas fa-receipt"></i>
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <i class="fas fa-receipt"></i>
+        <p>No transactions yet</p>
+        <a href="{{ url_for('business_transactions', customer_id=customer.id) }}" class="btn btn-primary">Add first transaction</a>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block inline_css %}
+.section-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.customer-profile {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    margin-bottom: 30px;
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.profile-avatar {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 20px;
+}
+
+.profile-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-name {
+    margin: 0 0 10px;
+    font-size: 1.5rem;
+}
+
+.profile-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.detail-item i {
+    width: 20px;
+    margin-right: 10px;
+}
+
+.balance-card {
+    background-color: var(--accent-color);
+    color: white;
+    padding: 15px;
+    border-radius: var(--border-radius);
+    text-align: center;
+    min-width: 150px;
+}
+
+.balance-label {
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+}
+
+.balance-amount {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.balance-updated {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.action-buttons {
+    display: flex;
+    padding: 15px 20px;
+    gap: 15px;
+}
+
+.action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 15px;
+    border-radius: 25px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.action-button i {
+    margin-right: 8px;
+}
+
+.action-button.whatsapp {
+    background-color: #25D366;
+    color: white;
+}
+
+.action-button.whatsapp:hover {
+    background-color: #128C7E;
+}
+
+.section-title {
+    margin: 30px 0 15px;
+    font-size: 1.3rem;
+}
+
+.transaction-history {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.transaction-item {
+    display: flex;
+    align-items: center;
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 15px;
+}
+
+.transaction-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+}
+
+.transaction-credit .transaction-icon {
+    background-color: rgba(var(--credit-red-rgb), 0.1);
+    color: var(--credit-red);
+}
+
+.transaction-payment .transaction-icon {
+    background-color: rgba(var(--payment-green-rgb), 0.1);
+    color: var(--payment-green);
+}
+
+.transaction-details {
+    flex: 1;
+}
+
+.transaction-date {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+}
+
+.transaction-notes {
+    font-size: 1rem;
+}
+
+.transaction-amount {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin: 0 15px;
+}
+
+.transaction-credit .transaction-amount {
+    color: var(--credit-red);
+}
+
+.transaction-payment .transaction-amount {
+    color: var(--payment-green);
+}
+
+.transaction-receipt {
+    margin-left: 10px;
+}
+
+.receipt-link {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--light-background);
+    color: var(--text-color);
+    border-radius: 50%;
+    text-decoration: none;
+}
+
+.receipt-link:hover {
+    background-color: var(--border-color);
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 0;
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+}
+
+.empty-state p {
+    margin-bottom: 20px;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+}
+{% endblock %} 

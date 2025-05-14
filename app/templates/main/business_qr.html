@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Business QR Code{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Force dark theme styles with blue accent for business interface */
+    body, html {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    
+    .card {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333333 !important;
+        color: #ffffff !important;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .text-primary {
+        color: #3498db !important; /* Blue color for business interface */
+    }
+    
+    a {
+        color: #3498db !important; /* Blue color for business interface */
+    }
+    
+    .btn-primary {
+        background-color: #3498db !important;
+        border-color: #3498db !important;
+    }
+    
+    .btn-outline-primary {
+        color: #3498db !important;
+        border-color: #3498db !important;
+    }
+    
+    .btn-outline-primary:hover {
+        background-color: #3498db !important;
+        color: #ffffff !important;
+    }
+    
+    .text-muted {
+        color: #b3b3b3 !important;
+    }
+    
+    .qr-container {
+        padding: 15px;
+        background-color: white;
+        display: inline-block;
+        margin: 20px auto;
+        border-radius: 8px;
+    }
+    
+    .business-code {
+        font-size: 24px;
+        font-weight: bold;
+        letter-spacing: 2px;
+        color: #3498db !important; /* Blue color for business interface */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1>Business QR Code</h1>
+            <p class="text-muted">Customers can scan this QR code or enter your business code to add your business</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3 class="mb-3">{{ business.name }}</h3>
+                    <p>{{ business.description }}</p>
+                    
+                    <div class="qr-container">
+                        <img src="{{ qr_code }}" alt="Business QR Code" class="img-fluid">
+                    </div>
+                    
+                    <div class="mt-4">
+                        <p class="text-muted">Business Access Code</p>
+                        <p class="business-code">{{ business.access_pin }}</p>
+                        <p class="text-muted">Share this code with your customers</p>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-primary">Back to Dashboard</a>
+                        <button class="btn btn-primary" onclick="copyToClipboard('{{ business.access_pin }}')">
+                            Copy Code
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(function() {
+            alert('Business code copied to clipboard!');
+        }, function(err) {
+            console.error('Could not copy text: ', err);
+        });
+    }
+</script>
+{% endblock %} 

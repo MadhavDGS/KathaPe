@@ -1,0 +1,95 @@
+{
+  "users": {
+    "9999999999": {
+      "id": "802b0c2a-0faf-4781-9e48-f4b5619cc85c",
+      "name": "Sample Business",
+      "phone_number": "9999999999",
+      "password": "password123",
+      "user_type": "business",
+      "created_at": "2025-05-14T19:03:29.718027"
+    },
+    "8888888888": {
+      "id": "aecf61d7-89c6-46e2-ac03-fd8bfbc5b4f8",
+      "name": "Sample Customer",
+      "phone_number": "8888888888",
+      "password": "password123",
+      "user_type": "customer",
+      "created_at": "2025-05-14T19:03:29.718037"
+    },
+    "9391228193": {
+      "id": "63442c73-1516-4e45-93ff-ce9887f4bdb5",
+      "name": "sreemadhav",
+      "phone_number": "9391228193",
+      "password": "9391228193",
+      "user_type": "customer",
+      "created_at": "2025-05-14T19:08:41.889513"
+    },
+    "9391228190": {
+      "id": "dd95d49b-c0ce-498e-b0e0-36e34b5edb52",
+      "name": "madhav",
+      "phone_number": "9391228190",
+      "password": "9391228193",
+      "user_type": "customer",
+      "created_at": "2025-05-14T19:11:37.693881"
+    },
+    "9391228199": {
+      "id": "2044f7d9-0987-409f-bd2e-7b5b6f956a7b",
+      "name": "madhavbusiness",
+      "phone_number": "9391228199",
+      "password": "9391228193",
+      "user_type": "business",
+      "created_at": "2025-05-14T19:32:14.990305"
+    }
+  },
+  "businesses": {
+    "802b0c2a-0faf-4781-9e48-f4b5619cc85c": {
+      "id": "f2af6d16-5a7a-468b-8a41-5df81e934899",
+      "user_id": "802b0c2a-0faf-4781-9e48-f4b5619cc85c",
+      "name": "Sample Business Account",
+      "description": "Mock business account",
+      "access_pin": "1234",
+      "created_at": "2025-05-14T19:03:29.718048"
+    },
+    "2044f7d9-0987-409f-bd2e-7b5b6f956a7b": {
+      "id": "f5ff0b5a-1867-4fab-bc2b-feb44ca7d4c5",
+      "user_id": "2044f7d9-0987-409f-bd2e-7b5b6f956a7b",
+      "name": "madhavbusiness's Business",
+      "description": "Auto-created business account",
+      "access_pin": "1234",
+      "created_at": "2025-05-14T19:32:14.990336"
+    }
+  },
+  "customers": {
+    "aecf61d7-89c6-46e2-ac03-fd8bfbc5b4f8": {
+      "id": "c21a56e4-0099-45f1-aedc-cab2f86cc6d7",
+      "user_id": "aecf61d7-89c6-46e2-ac03-fd8bfbc5b4f8",
+      "name": "Sample Customer",
+      "phone_number": "8888888888",
+      "created_at": "2025-05-14T19:03:29.718053"
+    },
+    "63442c73-1516-4e45-93ff-ce9887f4bdb5": {
+      "id": "48c5a318-1d7d-45f7-b516-df00a4b45db8",
+      "user_id": "63442c73-1516-4e45-93ff-ce9887f4bdb5",
+      "name": "sreemadhav",
+      "phone_number": "9391228193",
+      "created_at": "2025-05-14T19:08:41.889547"
+    },
+    "dd95d49b-c0ce-498e-b0e0-36e34b5edb52": {
+      "id": "223b0524-f639-4f00-8bf0-2a1c320ffc6c",
+      "user_id": "dd95d49b-c0ce-498e-b0e0-36e34b5edb52",
+      "name": "madhav",
+      "phone_number": "9391228190",
+      "created_at": "2025-05-14T19:11:37.693906"
+    }
+  },
+  "customer_credits": [
+    {
+      "id": "25a440f2-73fa-4ade-b378-1cd6a96051ec",
+      "business_id": "f2af6d16-5a7a-468b-8a41-5df81e934899",
+      "customer_id": "c21a56e4-0099-45f1-aedc-cab2f86cc6d7",
+      "current_balance": 500,
+      "created_at": "2025-05-14T19:03:29.718056"
+    }
+  ],
+  "transactions": []
+}

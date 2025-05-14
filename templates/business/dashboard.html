@@ -1,0 +1,754 @@
+{% extends "base.html" %}
+
+{% block title %}Business Dashboard{% endblock %}
+
+{% block header_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Business Profile Section -->
+    <div class="profile-card">
+        <div class="profile-image">
+            {% if business.profile_photo_url %}
+                <img src="{{ business.profile_photo_url }}" alt="Business Profile">
+            {% else %}
+                <div class="placeholder">
+                    <i class="fas fa-store"></i>
+                </div>
+            {% endif %}
+        </div>
+        <div class="profile-info">
+            <h2>{{ business.name }}</h2>
+            <p>{{ business.description }}</p>
+        </div>
+    </div>
+
+    <!-- Financial Summary -->
+    <div class="summary-cards">
+        <div class="summary-card credit-card">
+            <div class="summary-icon">
+                <i class="fas fa-hand-holding-usd"></i>
+            </div>
+            <div class="summary-content">
+                <div class="summary-label">TOTAL CREDIT GIVEN</div>
+                <div class="summary-amount">₹{{ summary.total_credit }}</div>
+            </div>
+        </div>
+        <div class="summary-card balance-card">
+            <div class="summary-icon">
+                <i class="fas fa-wallet"></i>
+            </div>
+            <div class="summary-content">
+                <div class="summary-label">TOTAL TO RECEIVE</div>
+                <div class="summary-amount">₹{{ summary.total_payments }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+        <a href="{{ url_for('business_customers') }}" class="action-btn customers-btn">
+            <i class="fas fa-users"></i>
+            <span>View Customers</span>
+        </a>
+        <a href="{{ url_for('add_customer') }}" class="action-btn add-btn">
+            <i class="fas fa-user-plus"></i>
+            <span>Add Customer</span>
+        </a>
+    </div>
+
+    <!-- QR Code Section -->
+    <div class="connect-card">
+        <div class="connect-header">
+            <h3>Customer Connection</h3>
+            <p>Share these details with your customers to connect</p>
+        </div>
+        <div class="connect-content">
+            <div class="pin-display">
+                <span class="label">Your PIN:</span>
+                <span class="pin">{{ business.access_pin }}</span>
+            </div>
+            
+            <div class="qr-code-container">
+                <div class="qr-code">
+                    <img src="{{ url_for('business_qr_image', business_id=business.id) }}" alt="Business QR Code" onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/placeholder_qr.png') }}';">
+                </div>
+                <p class="qr-info">Scan to connect with {{ business.name }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customers Section -->
+    <div class="section-header">
+        <h3>Your Customers</h3>
+        <a href="{{ url_for('business_customers') }}" class="view-all">View All</a>
+    </div>
+
+    {% if customers %}
+        <div class="customer-list">
+            {% for customer in customers %}
+                <a href="{{ url_for('business_customer_details', customer_id=customer.id) }}" class="customer-card">
+                    <div class="customer-avatar">
+                        {% if customer.profile_photo_url %}
+                            <img src="{{ customer.profile_photo_url }}" alt="{{ customer.name }}">
+                        {% else %}
+                            <div class="avatar-placeholder">
+                                {{ customer.name[0]|upper if customer.name else '?' }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="customer-info">
+                        <div class="customer-name">{{ customer.name }}</div>
+                        <div class="customer-balance {% if customer.current_balance > 0 %}positive{% endif %}">
+                            ₹{{ customer.current_balance|abs }}
+                        </div>
+                    </div>
+                    <div class="customer-actions">
+                        <a href="{{ url_for('remind_customer', customer_id=customer.id) }}" class="remind-btn">
+                            <i class="fab fa-whatsapp"></i>
+                        </a>
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-users"></i>
+            <p>No customers yet</p>
+            <a href="{{ url_for('add_customer') }}" class="btn btn-primary">Add your first customer</a>
+        </div>
+    {% endif %}
+
+    <!-- Transactions Section -->
+    <div class="section-header">
+        <h3>Recent Transactions</h3>
+    </div>
+
+    {% if transactions %}
+        <div class="transaction-list">
+            {% for transaction in transactions %}
+                <div class="transaction-card">
+                    <div class="transaction-icon {% if transaction.transaction_type == 'credit' %}credit-icon{% else %}payment-icon{% endif %}">
+                        {% if transaction.transaction_type == 'credit' %}
+                            <i class="fas fa-arrow-up"></i>
+                        {% else %}
+                            <i class="fas fa-arrow-down"></i>
+                        {% endif %}
+                    </div>
+                    <div class="transaction-info">
+                        <div class="transaction-name">{{ transaction.customer_name }}</div>
+                        <div class="transaction-date">{{ transaction.created_at|datetime }}</div>
+                    </div>
+                    <div class="transaction-amount {{ transaction.transaction_type }}">
+                        {% if transaction.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ transaction.amount }}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-receipt"></i>
+            <p>No transactions yet</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block inline_css %}
+:root {
+    --credit-color: #e74c3c;
+    --credit-light: rgba(231, 76, 60, 0.1);
+    --payment-color: #2ecc71;
+    --payment-light: rgba(46, 204, 113, 0.1);
+    --dark-bg: #1a1f2e;
+    --card-bg: #252a3c;
+    --text-color: #f0f0f0;
+    --text-muted: #a0a0a0;
+    --primary-color: #5c67de;
+    --primary-light: rgba(92, 103, 222, 0.15);
+    --border-radius: 14px;
+    --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    --spacing: 20px;
+    --whatsapp: #25D366;
+}
+
+body {
+    background-color: var(--dark-bg);
+    color: var(--text-color);
+    margin: 0;
+    padding: 0;
+}
+
+.dashboard-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+}
+
+/* Profile Card */
+.profile-card {
+    display: flex;
+    align-items: center;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: var(--spacing);
+    margin-bottom: var(--spacing);
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.profile-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.profile-image {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 20px;
+    background-color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 24px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    border: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-info h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+    color: white;
+}
+
+.profile-info p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* Summary Cards */
+.summary-cards {
+    display: flex;
+    gap: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+.summary-card {
+    flex: 1;
+    padding: 20px;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.summary-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.credit-card {
+    border-left: 4px solid var(--credit-color);
+}
+
+.balance-card {
+    border-left: 4px solid var(--payment-color);
+}
+
+.summary-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    font-size: 20px;
+}
+
+.credit-card .summary-icon {
+    background-color: var(--credit-light);
+    color: var(--credit-color);
+}
+
+.balance-card .summary-icon {
+    background-color: var(--payment-light);
+    color: var(--payment-color);
+}
+
+.summary-content {
+    flex: 1;
+}
+
+.summary-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.summary-amount {
+    font-size: 24px;
+    font-weight: 700;
+    color: white;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+.action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    text-decoration: none;
+    color: var(--text-color);
+    transition: all 0.3s;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.action-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.action-btn i {
+    font-size: 28px;
+    margin-bottom: 10px;
+}
+
+.action-btn span {
+    font-weight: 600;
+}
+
+.action-btn.customers-btn i {
+    color: var(--primary-color);
+}
+
+.action-btn.add-btn i {
+    color: var(--payment-color);
+}
+
+/* Connect Card */
+.connect-card {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+    margin-bottom: var(--spacing);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.connect-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.connect-header {
+    padding: 20px;
+    background: linear-gradient(135deg, var(--primary-color), #4152b3);
+    color: white;
+}
+
+.connect-header h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+}
+
+.connect-header p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.connect-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.pin-display {
+    margin-bottom: 20px;
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 12px 20px;
+    border-radius: 24px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.label {
+    font-weight: 600;
+    margin-right: 10px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.pin {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary-color);
+    letter-spacing: 2px;
+}
+
+.qr-code-container {
+    text-align: center;
+}
+
+.qr-code {
+    background-color: white;
+    padding: 20px;
+    display: inline-block;
+    border-radius: 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.qr-code img {
+    width: 200px;
+    height: 200px;
+}
+
+.qr-info {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Section Headers */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 32px 0 20px;
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    position: relative;
+    padding-left: 14px;
+    color: white;
+}
+
+.section-header h3:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 18px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.view-all {
+    font-size: 14px;
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.view-all:hover {
+    text-decoration: underline;
+}
+
+/* Customer List */
+.customer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: var(--spacing);
+}
+
+.customer-card {
+    display: flex;
+    align-items: center;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 16px 20px;
+    box-shadow: var(--box-shadow);
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.3s;
+}
+
+.customer-card:hover {
+    transform: translateX(5px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.customer-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-right: 15px;
+    background-color: var(--primary-color);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.customer-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.customer-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.customer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 4px;
+}
+
+.customer-balance {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--credit-color);
+}
+
+.customer-balance.positive {
+    color: var(--payment-color);
+}
+
+.customer-actions {
+    margin-left: 12px;
+}
+
+.remind-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background-color: rgba(37, 211, 102, 0.15);
+    color: var(--whatsapp);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: all 0.3s;
+    border: 1px solid rgba(37, 211, 102, 0.3);
+}
+
+.remind-btn:hover {
+    background-color: rgba(37, 211, 102, 0.25);
+    transform: scale(1.05);
+}
+
+/* Transaction List */
+.transaction-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: var(--spacing);
+}
+
+.transaction-card {
+    display: flex;
+    align-items: center;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 16px 20px;
+    box-shadow: var(--box-shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.3s;
+}
+
+.transaction-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.transaction-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+}
+
+.transaction-icon.credit-icon {
+    background-color: var(--credit-light);
+    color: var(--credit-color);
+}
+
+.transaction-icon.payment-icon {
+    background-color: var(--payment-light);
+    color: var(--payment-color);
+}
+
+.transaction-info {
+    flex: 1;
+}
+
+.transaction-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: white;
+    margin-bottom: 4px;
+}
+
+.transaction-date {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.transaction-amount {
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.transaction-amount.credit {
+    color: var(--credit-color);
+}
+
+.transaction-amount.payment {
+    color: var(--payment-color);
+}
+
+/* Empty State */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 40px 20px;
+    box-shadow: var(--box-shadow);
+    text-align: center;
+    margin-bottom: var(--spacing);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.empty-state i {
+    font-size: 36px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-state p {
+    margin: 0 0 20px;
+    color: var(--text-muted);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), #4152b3);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.3s;
+    display: inline-block;
+    box-shadow: 0 4px 15px rgba(92, 103, 222, 0.3);
+}
+
+.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(92, 103, 222, 0.4);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .summary-cards {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .action-buttons {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .qr-code img {
+        width: 180px;
+        height: 180px;
+    }
+    
+    .dashboard-container {
+        padding: 15px 12px 30px;
+    }
+    
+    .profile-card,
+    .connect-content,
+    .connect-header,
+    .summary-card {
+        padding: 15px;
+    }
+    
+    .section-header {
+        margin: 25px 0 15px;
+    }
+    
+    .profile-image {
+        width: 60px;
+        height: 60px;
+    }
+}
+
+@media (max-width: 480px) {
+    .qr-code img {
+        width: 150px;
+        height: 150px;
+    }
+}
+{% endblock %} 

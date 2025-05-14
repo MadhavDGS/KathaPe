@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %} - KathaPe</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+    <style>
+        :root {
+            /* Common Variables */
+            --primary-color: #5c67de;
+            --primary-light: rgba(92, 103, 222, 0.15);
+            --primary-gradient: linear-gradient(135deg, #5c67de, #41a0e6);
+            --credit-color: #e74c3c;
+            --credit-light: rgba(231, 76, 60, 0.1);
+            --payment-color: #2ecc71;
+            --payment-light: rgba(46, 204, 113, 0.1);
+            --border-radius: 14px;
+            
+            /* Light Theme Variables */
+            --text-color: #333;
+            --text-muted: #666;
+            --bg-color: #f5f8fa;
+            --card-bg: #ffffff;
+            --border-color: #eaeaea;
+            --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --header-bg: var(--primary-color);
+            --header-text: #ffffff;
+            --footer-bg: #f7f7f7;
+            --footer-text: #888;
+            --input-bg: #ffffff;
+            --input-border: #e0e0e0;
+            --input-text: #333;
+        }
+        
+        [data-theme="dark"] {
+            --text-color: #f0f0f0;
+            --text-muted: #a0a0a0;
+            --bg-color: #1a1f2e;
+            --card-bg: #252a3c;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+            --header-bg: #252a3c;
+            --header-text: #ffffff;
+            --footer-bg: #1e1e1e;
+            --footer-text: #a0a0a0;
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --input-border: rgba(255, 255, 255, 0.1);
+            --input-text: #ffffff;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            transition: all 0.3s ease;
+        }
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Header styles */
+        .app-header {
+            background-color: var(--header-bg);
+            color: var(--header-text);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .app-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--header-text);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .nav-links a {
+            color: var(--header-text);
+            text-decoration: none;
+            font-weight: 600;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+            padding: 8px 12px;
+            border-radius: 24px;
+        }
+        
+        .nav-links a:hover {
+            opacity: 1;
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+        
+        .logout-btn {
+            padding: 8px 14px !important;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 24px;
+        }
+        
+        /* Theme toggle */
+        .theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        [data-theme="dark"] .theme-toggle {
+            background-color: #ffd700;
+            color: #333;
+            border: 2px solid rgba(0, 0, 0, 0.2);
+        }
+        
+        .theme-toggle i {
+            font-size: 1.5rem;
+            text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+        }
+        
+        [data-theme="light"] .theme-toggle i.fa-moon {
+            color: white; 
+            filter: drop-shadow(0px 0px 2px rgba(0, 0, 0, 0.7));
+        }
+        
+        [data-theme="dark"] .theme-toggle i.fa-sun {
+            color: #333;
+            filter: drop-shadow(0px 0px 1px rgba(255, 255, 255, 0.7));
+        }
+        
+        .theme-toggle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        
+        /* Main container */
+        .container {
+            flex: 1;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 16px;
+        }
+        
+        /* Flash messages */
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        
+        .flash-message {
+            padding: 14px 18px;
+            border-radius: var(--border-radius);
+            margin-bottom: 10px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+        
+        .flash-message:before {
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .flash-message.success {
+            background-color: rgba(0, 200, 83, 0.1);
+            color: #00a252;
+            border-left: 4px solid #00a252;
+        }
+        
+        .flash-message.success:before {
+            content: "\f058"; /* check-circle */
+        }
+        
+        .flash-message.error {
+            background-color: rgba(255, 0, 0, 0.1);
+            color: #e50000;
+            border-left: 4px solid #e50000;
+        }
+        
+        .flash-message.error:before {
+            content: "\f057"; /* times-circle */
+        }
+        
+        .flash-message.warning {
+            background-color: rgba(255, 180, 0, 0.1);
+            color: #ff9100;
+            border-left: 4px solid #ff9100;
+        }
+        
+        .flash-message.warning:before {
+            content: "\f071"; /* exclamation-triangle */
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: var(--footer-bg);
+            color: var(--footer-text);
+            padding: 20px 0;
+            text-align: center;
+            font-size: 0.9rem;
+            margin-top: auto;
+        }
+        
+        /* Animated background */
+        .animated-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(45deg, #5c67de15, #41e6a615, #5c67de15);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+            z-index: -1;
+        }
+        
+        [data-theme="dark"] .animated-bg {
+            background: linear-gradient(45deg, #5c67de25, #9141e615, #5c67de25);
+        }
+        
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .nav-toggle {
+                display: block;
+            }
+            
+            .nav-links {
+                position: fixed;
+                top: 0;
+                right: -280px;
+                width: 280px;
+                height: 100vh;
+                background-color: var(--header-bg);
+                flex-direction: column;
+                padding: 70px 20px 20px;
+                transition: right 0.3s ease;
+                box-shadow: -2px 0 15px rgba(0, 0, 0, 0.3);
+                z-index: 101;
+                gap: 10px;
+            }
+            
+            .nav-links.active {
+                right: 0;
+            }
+            
+            .nav-links a {
+                padding: 12px 16px;
+                border-radius: 12px;
+                width: 100%;
+                text-align: left;
+            }
+            
+            .app-title {
+                font-size: 1.4rem;
+            }
+            
+            .theme-toggle {
+                bottom: 20px;
+                right: 20px;
+                width: 60px;
+                height: 60px;
+            }
+            
+            .theme-toggle i {
+                font-size: 1.6rem;
+            }
+        }
+        
+        {% block inline_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <div class="animated-bg"></div>
+    
+    <header class="app-header">
+        <div class="header-content">
+            <h1 class="app-title">{% block header_title %}KathaPe{% endblock %}</h1>
+            
+            <button class="nav-toggle" id="navToggle" aria-label="Open Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            
+            <nav class="nav-links" id="navLinks">
+                {% if session.get('user_id') %}
+                    {% if session.get('user_type') == 'business' %}
+                        <a href="{{ url_for('business_dashboard') }}"><i class="fas fa-chart-line"></i> Dashboard</a>
+                        <a href="{{ url_for('business_customers') }}"><i class="fas fa-users"></i> Customers</a>
+                        <a href="{{ url_for('business_profile') }}"><i class="fas fa-user-circle"></i> Profile</a>
+                    {% else %}
+                        <a href="{{ url_for('customer_dashboard') }}"><i class="fas fa-home"></i> Home</a>
+                        <a href="{{ url_for('select_business') }}"><i class="fas fa-store"></i> Add Business</a>
+                        <a href="{{ url_for('customer_profile') }}"><i class="fas fa-user-circle"></i> Profile</a>
+                    {% endif %}
+                    <a href="{{ url_for('logout') }}" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                {% else %}
+                    <a href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Login</a>
+                    <a href="{{ url_for('register') }}"><i class="fas fa-user-plus"></i> Register</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+    
+    <div class="theme-toggle" id="themeToggle" aria-label="Toggle Dark Mode">
+        <i class="fas fa-moon"></i>
+    </div>
+    
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </div>
+    
+    <footer class="footer">
+        <div class="container">
+            © 2024 KathaPe. All rights reserved.
+        </div>
+    </footer>
+    
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = themeToggle.querySelector('i');
+        const htmlElement = document.documentElement;
+        
+        // Check for saved theme preference or use default
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        htmlElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+        
+        // Toggle theme when button is clicked
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = htmlElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            htmlElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        // Update icon based on current theme
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.className = 'fas fa-sun';
+            } else {
+                themeIcon.className = 'fas fa-moon';
+            }
+        }
+        
+        // Mobile navigation functionality
+        const navToggle = document.getElementById('navToggle');
+        const navLinks = document.getElementById('navLinks');
+        
+        navToggle.addEventListener('click', () => {
+            navLinks.classList.toggle('active');
+        });
+        
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (navLinks.classList.contains('active') && 
+                !navLinks.contains(e.target) && 
+                e.target !== navToggle) {
+                navLinks.classList.remove('active');
+            }
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

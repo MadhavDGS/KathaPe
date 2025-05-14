@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Add Business{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Force dark theme styles */
+    body, html {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    
+    .card {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333333 !important;
+        color: #ffffff !important;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .text-primary {
+        color: #2ecc71 !important;
+    }
+    
+    a {
+        color: #2ecc71 !important;
+    }
+    
+    .text-muted {
+        color: #b3b3b3 !important;
+    }
+    
+    .form-control {
+        background-color: #333 !important;
+        border-color: #444 !important;
+        color: #fff !important;
+    }
+    
+    .form-control:focus {
+        box-shadow: 0 0 0 0.2rem rgba(46, 204, 113, 0.25) !important;
+    }
+    
+    .tab-content {
+        padding-top: 20px;
+    }
+    
+    .nav-tabs .nav-link {
+        color: #aaa !important;
+        background-color: transparent !important;
+        border-color: transparent !important;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: #2ecc71 !important;
+        background-color: #1e1e1e !important;
+        border-color: #333 #333 #1e1e1e !important;
+        border-bottom: 2px solid #2ecc71 !important;
+    }
+    
+    #qr-preview {
+        width: 100%;
+        height: 300px;
+        border: 1px solid #333;
+        border-radius: 8px;
+        background-color: #2a2a2a;
+        position: relative;
+    }
+    
+    #qr-start-button, #qr-stop-button {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1>Add Business</h1>
+            <p class="text-muted">Add a business to your customer dashboard</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="addBusinessTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="code-tab" data-bs-toggle="tab" data-bs-target="#code-tab-pane" type="button" role="tab" aria-controls="code-tab-pane" aria-selected="true">
+                                Enter Code
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="scan-tab" data-bs-toggle="tab" data-bs-target="#scan-tab-pane" type="button" role="tab" aria-controls="scan-tab-pane" aria-selected="false">
+                                Scan QR Code
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="addBusinessTabsContent">
+                        <!-- Enter Code Tab -->
+                        <div class="tab-pane fade show active" id="code-tab-pane" role="tabpanel" aria-labelledby="code-tab" tabindex="0">
+                            <form method="post" action="{{ url_for('main.add_business_by_code') }}">
+                                <div class="mb-3">
+                                    <label for="access_pin" class="form-label">Business Code</label>
+                                    <input type="text" class="form-control" id="access_pin" name="access_pin" placeholder="Enter 6-digit business code" required>
+                                    <div class="form-text text-muted">
+                                        Enter the 6-digit code provided by the business
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">Add Business</button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <!-- Scan QR Tab -->
+                        <div class="tab-pane fade" id="scan-tab-pane" role="tabpanel" aria-labelledby="scan-tab" tabindex="0">
+                            <div class="text-center mb-3">
+                                <p>Position the QR code in front of your camera</p>
+                            </div>
+                            
+                            <div id="qr-preview" class="mb-3">
+                                <video id="qr-video" class="w-100 h-100" style="border-radius: 8px;"></video>
+                                <button id="qr-start-button" class="btn btn-primary">Start Scanner</button>
+                                <button id="qr-stop-button" class="btn btn-outline-primary" style="display: none;">Stop Scanner</button>
+                            </div>
+                            
+                            <div id="qr-result" class="alert alert-success" style="display: none;">
+                                <p id="qr-result-text"></p>
+                                <form id="qr-form" method="post" action="{{ url_for('main.add_business_by_code') }}">
+                                    <input type="hidden" id="qr-access-pin" name="access_pin">
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" class="btn btn-primary">Add This Business</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const html5QrCode = new Html5Qrcode("qr-preview");
+        const qrVideo = document.getElementById('qr-video');
+        const qrStartButton = document.getElementById('qr-start-button');
+        const qrStopButton = document.getElementById('qr-stop-button');
+        const qrResult = document.getElementById('qr-result');
+        const qrResultText = document.getElementById('qr-result-text');
+        const qrAccessPin = document.getElementById('qr-access-pin');
+        let scanning = false;
+        
+        function onScanSuccess(decodedText, decodedResult) {
+            // Example QR code format: business:123:Business Name:123456
+            const parts = decodedText.split(':');
+            if (parts.length === 4 && parts[0] === 'business') {
+                const businessId = parts[1];
+                const businessName = parts[2];
+                const accessPin = parts[3];
+                
+                html5QrCode.stop();
+                scanning = false;
+                qrStartButton.style.display = 'block';
+                qrStopButton.style.display = 'none';
+                
+                qrResultText.textContent = `Found business: ${businessName}`;
+                qrAccessPin.value = accessPin;
+                qrResult.style.display = 'block';
+            }
+        }
+        
+        function onScanFailure(error) {
+            // Handle scan failure, usually better to ignore and keep scanning
+            console.log(`QR Code scanning failed: ${error}`);
+        }
+        
+        qrStartButton.addEventListener('click', function() {
+            if (!scanning) {
+                scanning = true;
+                qrResult.style.display = 'none';
+                qrStartButton.style.display = 'none';
+                qrStopButton.style.display = 'block';
+                
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    onScanSuccess,
+                    onScanFailure
+                ).catch((err) => {
+                    scanning = false;
+                    qrStartButton.style.display = 'block';
+                    qrStopButton.style.display = 'none';
+                    alert('Could not start scanner. Please check camera permissions.');
+                    console.log(err);
+                });
+            }
+        });
+        
+        qrStopButton.addEventListener('click', function() {
+            if (scanning) {
+                html5QrCode.stop().then(() => {
+                    scanning = false;
+                    qrStartButton.style.display = 'block';
+                    qrStopButton.style.display = 'none';
+                }).catch(err => console.log(err));
+            }
+        });
+        
+        // Handle tab change - stop scanning when switching tabs
+        document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+            tab.addEventListener('shown.bs.tab', function(event) {
+                if (event.target.id !== 'scan-tab' && scanning) {
+                    html5QrCode.stop().then(() => {
+                        scanning = false;
+                        qrStartButton.style.display = 'block';
+                        qrStopButton.style.display = 'none';
+                    }).catch(err => console.log(err));
+                }
+            });
+        });
+    });
+</script>
+{% endblock %} 

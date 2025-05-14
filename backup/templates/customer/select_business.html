@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Add Business{% endblock %}
+
+{% block header_title %}Add Business{% endblock %}
+
+{% block content %}
+<div class="card-container">
+    <div class="card">
+        <div class="card-header">
+            <h2>Connect with a Business</h2>
+            <p class="subtitle">Enter the access PIN provided by the business</p>
+        </div>
+        
+        <form method="POST" class="card-form">
+            <div class="form-group">
+                <label for="access_pin" class="form-label">Business Access PIN</label>
+                <input type="text" id="access_pin" name="access_pin" class="form-input pin-input" placeholder="Enter 4-digit PIN" required>
+            </div>
+            
+            <button type="submit" class="btn">Connect</button>
+        </form>
+        
+        <div class="card-footer">
+            <p>Don't have an access PIN? Ask the business owner to provide you with their unique PIN.</p>
+        </div>
+    </div>
+    
+    <div class="scan-option">
+        <p>Or</p>
+        <a href="{{ url_for('scan_qr') }}" class="btn btn-accent">
+            <i class="fas fa-qrcode"></i> Scan QR Code
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.card-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+}
+
+.card {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    width: 100%;
+    max-width: 400px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    padding: 20px;
+    background-color: var(--primary-color);
+    color: var(--white);
+    text-align: center;
+}
+
+.card-header h2 {
+    margin-bottom: 10px;
+    font-size: 1.5rem;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.card-form {
+    padding: 20px;
+}
+
+.card-footer {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #eee;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.pin-input {
+    text-align: center;
+    letter-spacing: 2px;
+    font-size: 1.2rem;
+}
+
+.scan-option {
+    text-align: center;
+    margin-top: 10px;
+}
+
+.scan-option p {
+    margin-bottom: 10px;
+    color: #666;
+}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const pinInput = document.getElementById('access_pin');
+        
+        // Format the PIN as it's typed
+        pinInput.addEventListener('input', function() {
+            // Remove any non-numeric characters
+            this.value = this.value.replace(/[^0-9]/g, '');
+            
+            // Limit to 4 digits
+            if (this.value.length > 4) {
+                this.value = this.value.slice(0, 4);
+            }
+        });
+    });
+</script>
+{% endblock %} 

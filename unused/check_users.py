@@ -1,0 +1,1 @@
+from app import get_supabase_client; supabase = get_supabase_client(); result = supabase.table('users').select('*').execute(); print(f'Found {len(result.data)} users:'); [print(f"ID: {user.get('id')}, Phone: {user.get('phone_number')}, Type: {user.get('user_type')}") for user in result.data[:5]]

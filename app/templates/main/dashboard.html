@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Business Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Force dark theme styles with blue accent for business interface */
+    body, html {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    
+    .card {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333333 !important;
+        color: #ffffff !important;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .text-primary {
+        color: #3498db !important; /* Blue color for business interface */
+    }
+    
+    a {
+        color: #3498db !important; /* Blue color for business interface */
+    }
+    
+    .btn-primary {
+        background-color: #3498db !important; /* Blue color for business interface */
+        border-color: #3498db !important;
+    }
+    
+    .btn-outline-primary {
+        color: #3498db !important; /* Blue color for business interface */
+        border-color: #3498db !important;
+    }
+    
+    .btn-outline-primary:hover {
+        background-color: #3498db !important; /* Blue color for business interface */
+        color: #ffffff !important;
+    }
+    
+    .text-muted {
+        color: #b3b3b3 !important;
+    }
+    
+    .table {
+        color: #ffffff !important;
+    }
+    
+    .table th, .table td {
+        border-color: #333333 !important;
+    }
+    
+    .badge-success {
+        background-color: #3498db !important; /* Blue color for business interface */
+    }
+    
+    .badge-danger {
+        background-color: #e74c3c !important;
+    }
+    
+    .text-success {
+        color: #2ecc71 !important;
+    }
+    
+    .text-danger {
+        color: #e74c3c !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1>Business Dashboard</h1>
+            <p class="text-muted">Welcome back, {{ user.name }}</p>
+        </div>
+    </div>
+
+    <!-- Business Summary Cards -->
+    <div class="row mb-4">
+        {% if businesses %}
+            {% for business in businesses %}
+                <div class="col-md-6 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="card-title">{{ business.name }}</h5>
+                                <span class="badge {% if business.is_active %}badge-success{% else %}badge-danger{% endif %}">
+                                    {% if business.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </div>
+                            <h2 class="text-primary">₹ {{ business.balance }}</h2>
+                            <p class="card-text text-muted">{{ business.description }}</p>
+                            <div class="d-flex justify-content-between mt-3">
+                                <a href="#" class="btn btn-outline-primary btn-sm">View Details</a>
+                                <a href="{{ url_for('main.business_qr', business_id=business.id) }}" class="btn btn-outline-primary btn-sm">QR Code</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-4">
+                        <h5 class="mb-3">No businesses yet</h5>
+                        <p class="text-muted mb-3">You haven't added any businesses yet. Create your first business to get started.</p>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBusinessModal">Add Business</button>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Recent Transactions</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_transactions %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Amount</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for transaction in recent_transactions %}
+                                    <tr>
+                                        <td class="{% if transaction.type == 'credit' %}text-success{% else %}text-danger{% endif %}">
+                                            {% if transaction.type == 'credit' %}+{% else %}-{% endif %}₹ {{ transaction.amount }}
+                                        </td>
+                                        <td>{{ transaction.type|capitalize }}</td>
+                                        <td>{{ transaction.description }}</td>
+                                        <td>{{ transaction.date }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <p>No transactions yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Quick Actions</h5>
+                </div>
+                <div class="card-body d-flex flex-wrap justify-content-between">
+                    <a href="{{ url_for('main.add_transaction') }}" class="btn btn-primary mb-2">Add Transaction</a>
+                    <button type="button" class="btn btn-outline-primary mb-2" data-bs-toggle="modal" data-bs-target="#addBusinessModal">Add Business</button>
+                    <a href="{{ url_for('main.add_customer') }}" class="btn btn-outline-primary mb-2">Add Customer</a>
+                    <a href="#" class="btn btn-outline-primary mb-2">View Reports</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Business Modal -->
+<div class="modal fade" id="addBusinessModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Add New Business</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addBusinessForm" method="POST" action="{{ url_for('main.add_business') }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Business Name</label>
+                        <input type="text" class="form-control bg-dark text-light border-secondary" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control bg-dark text-light border-secondary" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="initial_balance" class="form-label">Initial Balance</label>
+                        <input type="number" class="form-control bg-dark text-light border-secondary" id="initial_balance" name="initial_balance" value="0">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="addBusinessForm" class="btn btn-primary">Add Business</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

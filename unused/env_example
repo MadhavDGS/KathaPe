@@ -1,0 +1,14 @@
+# Supabase Configuration
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+
+# Flask Configuration
+SECRET_KEY=your_flask_secret_key
+DEBUG=true
+PORT=5002
+
+# Application Configuration
+AUTO_CREATE_USERS=false  # Set to 'true' to auto-create users on login attempt
+UPLOAD_FOLDER=static/uploads
+QR_CODES_FOLDER=static/qr_codes 

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome to Khata{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Purple theme for landing page */
+    body, html {
+        background-color: #0f0a1e !important;
+        color: #ffffff !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+    
+    .card {
+        background-color: rgba(38, 20, 71, 0.7) !important;
+        border: 1px solid #382068 !important;
+        color: #ffffff !important;
+        margin-bottom: 20px;
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+        font-weight: 700;
+    }
+    
+    .hero-section {
+        padding: 100px 0 80px;
+        text-align: center;
+        background: linear-gradient(135deg, #2d1b4b, #1a0f2e);
+        border-radius: 0 0 30% 30% / 20%;
+        margin-bottom: 60px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    .display-4 {
+        font-weight: 800;
+        font-size: 3.5rem;
+        background: linear-gradient(90deg, #a673ff, #6f42c1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 1rem;
+    }
+    
+    .lead {
+        font-size: 1.25rem;
+        color: #d0beff !important;
+        margin-bottom: 2rem;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(45deg, #6f42c1, #9370DB) !important;
+        border: none !important;
+        padding: 12px 28px;
+        font-weight: 600;
+        border-radius: 50px;
+        box-shadow: 0 4px 15px rgba(111, 66, 193, 0.4);
+        transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(111, 66, 193, 0.5);
+    }
+    
+    .btn-success {
+        background: linear-gradient(45deg, #38b2ac, #4fd1c5) !important;
+        border: none !important;
+        padding: 12px 28px;
+        font-weight: 600;
+        border-radius: 50px;
+        box-shadow: 0 4px 15px rgba(56, 178, 172, 0.4);
+        transition: all 0.3s ease;
+    }
+    
+    .btn-success:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(56, 178, 172, 0.5);
+    }
+    
+    .btn-outline-primary {
+        color: #a673ff !important;
+        border-color: #a673ff !important;
+        border-radius: 50px;
+        padding: 12px 28px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-outline-primary:hover {
+        background-color: #6f42c1 !important;
+        color: white !important;
+    }
+    
+    .btn-outline-success {
+        color: #38b2ac !important;
+        border-color: #38b2ac !important;
+        border-radius: 50px;
+        padding: 12px 28px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-outline-success:hover {
+        background-color: #38b2ac !important;
+        color: white !important;
+    }
+    
+    .feature-card {
+        height: 100%;
+        transition: all 0.3s ease;
+        padding: 2rem;
+        border-radius: 16px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-10px);
+    }
+    
+    .feature-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 5px;
+        background: linear-gradient(90deg, #a673ff, #6f42c1);
+    }
+    
+    .feature-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1.5rem;
+        display: inline-block;
+        width: 80px;
+        height: 80px;
+        line-height: 80px;
+        text-align: center;
+        border-radius: 50%;
+        background: rgba(111, 66, 193, 0.2);
+        color: #a673ff;
+    }
+    
+    .text-muted {
+        color: #b3b3ff !important;
+    }
+    
+    .register-card {
+        background: linear-gradient(135deg, rgba(38, 20, 71, 0.8), rgba(26, 15, 46, 0.8)) !important;
+        border: none !important;
+        padding: 2rem;
+    }
+    
+    .section-title {
+        position: relative;
+        padding-bottom: 15px;
+        margin-bottom: 30px;
+    }
+    
+    .section-title::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 4px;
+        background: linear-gradient(90deg, #a673ff, #6f42c1);
+        border-radius: 2px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <h1 class="display-4">Welcome to Khata</h1>
+            <p class="lead">A modern way to manage your business credits and customer relationships</p>
+            <div class="d-flex justify-content-center gap-4">
+                <a href="{{ url_for('auth.login', user_type='business') }}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-shop me-2"></i>Business Login
+                </a>
+                <a href="{{ url_for('auth.login', user_type='customer') }}" class="btn btn-success btn-lg">
+                    <i class="bi bi-person me-2"></i>Customer Login
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Features Section -->
+        <div class="row mb-5">
+            <div class="col-12 text-center mb-5">
+                <h2 class="section-title">Why Choose Khata</h2>
+                <p class="text-muted">Simplify your business operations with our powerful features</p>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card feature-card">
+                    <div class="text-center">
+                        <i class="bi bi-shop feature-icon"></i>
+                        <h4>Business Management</h4>
+                        <p class="text-muted">Manage multiple businesses in one place with an easy-to-use interface.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card feature-card">
+                    <div class="text-center">
+                        <i class="bi bi-people feature-icon"></i>
+                        <h4>Customer Credits</h4>
+                        <p class="text-muted">Keep track of customer credits and transactions with detailed history.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card feature-card">
+                    <div class="text-center">
+                        <i class="bi bi-qr-code feature-icon"></i>
+                        <h4>QR Code Integration</h4>
+                        <p class="text-muted">Generate QR codes for easy customer onboarding and business access.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Section -->
+        <div class="row mb-5">
+            <div class="col-md-8 offset-md-2">
+                <div class="card register-card">
+                    <div class="text-center p-4">
+                        <h3 class="mb-4">Get Started Today</h3>
+                        <p class="mb-4">Create an account and start managing your business or customer credits.</p>
+                        <div class="d-flex justify-content-center gap-3">
+                            <a href="{{ url_for('auth.register', user_type='business') }}" class="btn btn-outline-primary">
+                                <i class="bi bi-shop me-2"></i>Register as Business
+                            </a>
+                            <a href="{{ url_for('auth.register', user_type='customer') }}" class="btn btn-outline-success">
+                                <i class="bi bi-person me-2"></i>Register as Customer
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

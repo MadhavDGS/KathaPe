@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}{{ business.get('name', '') }}{% endblock %}
+
+{% block header_title %}{{ business.get('name', '') }}{% endblock %}
+
+{% block content %}
+<div class="business-view-container">
+    <div class="business-header">
+        <h1 class="business-name">{{ business.get('name', '') }}</h1>
+    </div>
+
+    <div class="balance-summary">
+        <div class="balance-card credit-total">
+            <div class="balance-icon">
+                <i class="fas fa-hand-holding-usd"></i>
+            </div>
+            <div class="balance-content">
+                <div class="balance-label">Total Credit Taken</div>
+                <div class="balance-amount">₹{{ credit_total|default(0) }}</div>
+            </div>
+        </div>
+        
+        <div class="balance-card payment-total">
+            <div class="balance-icon">
+                <i class="fas fa-wallet"></i>
+            </div>
+            <div class="balance-content">
+                <div class="balance-label">Current Balance</div>
+                <div class="balance-amount">₹{{ current_balance|default(0)|abs }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-buttons">
+        <a href="{{ url_for('customer_transaction', transaction_type='credit') }}" class="btn credit-btn">
+            <i class="fas fa-arrow-circle-up"></i> Take credit
+        </a>
+        <a href="{{ url_for('customer_transaction', transaction_type='payment') }}" class="btn payment-btn">
+            <i class="fas fa-arrow-circle-down"></i> Pay Back
+        </a>
+    </div>
+
+    <div class="section-header">
+        <h2 class="history-title">Transaction History</h2>
+    </div>
+
+    <div class="transaction-history">
+        {% if transactions %}
+            {% for transaction in transactions %}
+                <div class="transaction-row {% if transaction.get('transaction_type') == 'credit' %}credit{% else %}payment{% endif %}">
+                    <div class="transaction-icon">
+                        {% if transaction.get('transaction_type') == 'credit' %}
+                            <i class="fas fa-arrow-up"></i>
+                        {% else %}
+                            <i class="fas fa-arrow-down"></i>
+                        {% endif %}
+                    </div>
+                    <div class="transaction-info">
+                        <div class="transaction-amount">
+                            ₹{{ transaction.get('amount', 0) }}
+                        </div>
+                        <div class="transaction-date">
+                            {{ transaction.get('created_at', '')|datetime }}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <i class="fas fa-receipt"></i>
+                <p>No transactions yet.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block inline_css %}
+:root {
+    --credit-color: #e74c3c;
+    --credit-light: rgba(231, 76, 60, 0.1);
+    --payment-color: #2ecc71;
+    --payment-light: rgba(46, 204, 113, 0.1);
+    --dark-bg: #1a1f2e;
+    --card-bg: #252a3c;
+    --text-color: #f0f0f0;
+    --text-muted: #a0a0a0;
+    --primary-color: #5c67de;
+    --primary-light: rgba(92, 103, 222, 0.15);
+    --border-radius: 14px;
+    --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+body {
+    background-color: var(--dark-bg);
+    color: var(--text-color);
+}
+
+.business-view-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px 15px 40px;
+}
+
+.business-header {
+    padding: 15px 0 25px;
+}
+
+.business-name {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+    color: white;
+    position: relative;
+    padding-left: 14px;
+    display: inline-block;
+}
+
+.business-name:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 24px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.balance-summary {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.balance-card {
+    flex: 1;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 20px;
+    box-shadow: var(--box-shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.balance-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.balance-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    font-size: 20px;
+}
+
+.credit-total {
+    border-left: 4px solid var(--credit-color);
+}
+
+.credit-total .balance-icon {
+    background-color: var(--credit-light);
+    color: var(--credit-color);
+}
+
+.payment-total {
+    border-left: 4px solid var(--payment-color);
+}
+
+.payment-total .balance-icon {
+    background-color: var(--payment-light);
+    color: var(--payment-color);
+}
+
+.balance-content {
+    flex: 1;
+}
+
+.balance-label {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.balance-amount {
+    font-size: 24px;
+    font-weight: 700;
+    color: white;
+}
+
+.action-buttons {
+    margin: 25px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    border-radius: var(--border-radius);
+    text-align: center;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 18px;
+    color: white;
+    transition: all 0.3s;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.btn i {
+    margin-right: 10px;
+    font-size: 20px;
+}
+
+.btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.credit-btn {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.payment-btn {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+}
+
+.section-header {
+    margin: 30px 0 20px;
+}
+
+.history-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    position: relative;
+    padding-left: 14px;
+}
+
+.history-title:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 18px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.transaction-history {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--box-shadow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.transaction-row {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.3s;
+}
+
+.transaction-row:last-child {
+    border-bottom: none;
+}
+
+.transaction-row:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+    transform: translateX(5px);
+}
+
+.transaction-row.credit {
+    background-color: rgba(230, 126, 34, 0.07);
+}
+
+.transaction-row.credit:hover {
+    background-color: rgba(230, 126, 34, 0.1);
+}
+
+.transaction-row.payment {
+    background-color: rgba(52, 152, 219, 0.07);
+}
+
+.transaction-row.payment:hover {
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+.transaction-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    font-size: 16px;
+}
+
+.credit .transaction-icon {
+    background-color: var(--credit-light);
+    color: var(--credit-color);
+}
+
+.payment .transaction-icon {
+    background-color: var(--payment-light);
+    color: var(--payment-color);
+}
+
+.transaction-info {
+    flex: 1;
+}
+
+.transaction-amount {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: white;
+}
+
+.credit .transaction-amount {
+    color: var(--credit-color);
+}
+
+.payment .transaction-amount {
+    color: var(--payment-color);
+}
+
+.transaction-date {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.empty-state i {
+    font-size: 36px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-state p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 16px;
+}
+
+@media (min-width: 768px) {
+    .action-buttons {
+        flex-direction: row;
+    }
+    
+    .btn {
+        flex: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .balance-summary {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .balance-card {
+        padding: 16px;
+    }
+    
+    .business-view-container {
+        padding: 15px 12px 30px;
+    }
+}
+{% endblock %} 

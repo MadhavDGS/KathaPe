@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block header_title %}Login{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="tabs-container">
+        <div class="tab-selector">
+            <div class="tab-option active" data-type="customer">Customer</div>
+            <div class="tab-option" data-type="business">Business</div>
+        </div>
+        
+        <div class="tab-content">
+            <form method="POST">
+                <input type="hidden" name="user_type" id="user_type" value="customer">
+                
+                <div id="userTypeDisplay" class="user-type-display">
+                    Logging in as: <span id="selectedTypeText">Customer</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone" class="form-label">Mobile Number</label>
+                    <input type="tel" id="phone" name="phone" class="form-input" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" id="password" name="password" class="form-input" required>
+                </div>
+                
+                <button type="submit" class="btn">Login</button>
+                <a href="{{ url_for('register') }}" class="btn btn-secondary">New User?</a>
+            </form>
+        </div>
+    </div>
+    
+    <div class="mock-credentials">
+        <h3>Test Credentials</h3>
+        <p><strong>Business:</strong> Phone: 9999999999, Password: password123</p>
+        <p><strong>Customer:</strong> Phone: 8888888888, Password: password123</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.login-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 70vh;
+}
+
+.tabs-container {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    width: 100%;
+    max-width: 400px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.tab-selector {
+    display: flex;
+    border-bottom: 1px solid #eee;
+}
+
+.tab-option {
+    flex: 1;
+    text-align: center;
+    padding: 15px 0;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.tab-option.active {
+    background-color: var(--primary-color);
+    color: var(--white);
+}
+
+.tab-content {
+    padding: 25px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.user-type-display {
+    margin-bottom: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #f5f5f5;
+    text-align: center;
+    font-weight: bold;
+}
+
+.mock-credentials {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    width: 100%;
+    max-width: 400px;
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.mock-credentials h3 {
+    margin-top: 0;
+    text-align: center;
+    color: var(--primary-color);
+}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab selector functionality
+    const tabOptions = document.querySelectorAll('.tab-option');
+    const userTypeInput = document.getElementById('user_type');
+    const selectedTypeText = document.getElementById('selectedTypeText');
+    
+    // Function to update the form based on selected user type
+    function updateUserType(type) {
+        // Update hidden input value
+        userTypeInput.value = type;
+        
+        // Update the display text
+        selectedTypeText.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        
+        // Update tab UI
+        tabOptions.forEach(opt => {
+            if (opt.dataset.type === type) {
+                opt.classList.add('active');
+            } else {
+                opt.classList.remove('active');
+            }
+        });
+        
+        console.log("User type updated to:", type);
+    }
+    
+    // Initialize the form
+    updateUserType('customer');
+    
+    // Add click event listeners
+    tabOptions.forEach(option => {
+        option.addEventListener('click', function() {
+            updateUserType(this.dataset.type);
+        });
+    });
+    
+    // Extra check before submitting the form
+    document.querySelector('form').addEventListener('submit', function(e) {
+        console.log("Form submitted with user_type:", userTypeInput.value);
+    });
+</script>
+{% endblock %} 

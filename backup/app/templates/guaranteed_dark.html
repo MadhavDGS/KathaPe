@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guaranteed Dark Mode</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1, h2, h3 {
+            color: #2ecc71;
+        }
+        
+        .card {
+            background-color: #2a2a2a;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: #2ecc71;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
+            background-color: #27ae60;
+        }
+        
+        .text-muted {
+            color: #b3b3b3;
+        }
+        
+        a {
+            color: #2ecc71;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>This is guaranteed dark mode</h1>
+        <p>If you're seeing this page with a dark background, the server is working properly!</p>
+        
+        <div class="card">
+            <h2>Welcome to Khata</h2>
+            <p>Your all-in-one solution for managing business transactions</p>
+            <p class="text-muted">Current time: {{ current_time }}</p>
+            
+            <a href="/" class="btn">Back to Home</a>
+        </div>
+        
+        <p>Try one of these links:</p>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/test">Test Page</a></li>
+        </ul>
+    </div>
+</body>
+</html> 

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Business Management - Khata{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Force dark theme styles with blue accent for business interface */
+    body, html {
+        background-color: #121212 !important;
+        color: #ffffff !important;
+    }
+    
+    .card {
+        background-color: #1e1e1e !important;
+        border: 1px solid #333333 !important;
+        color: #ffffff !important;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    .card-footer {
+        background-color: #1e1e1e !important;
+        border-top: 1px solid #333333 !important;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
+    }
+    
+    .text-primary {
+        color: #3498db !important; /* Blue color for business interface */
+    }
+    
+    .text-muted {
+        color: #b3b3b3 !important;
+    }
+    
+    .btn-primary {
+        background-color: #3498db !important;
+        border-color: #3498db !important;
+    }
+    
+    .btn-outline-primary {
+        color: #3498db !important;
+        border-color: #3498db !important;
+    }
+    
+    .btn-outline-primary:hover {
+        background-color: #3498db !important;
+        color: #fff !important;
+    }
+    
+    .bg-success {
+        background-color: #3498db !important;
+    }
+    
+    .modal-content {
+        background-color: #1e1e1e !important;
+        color: #ffffff !important;
+    }
+    
+    .modal-header, .modal-footer {
+        border-color: #333333 !important;
+    }
+    
+    .form-control {
+        background-color: #333333 !important;
+        border-color: #444444 !important;
+        color: #ffffff !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2>Business Management</h2>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBusinessModal">
+                    <i class="bi bi-plus-circle me-1"></i> Add New Business
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        {% if businesses %}
+            {% for business in businesses %}
+            <div class="col-md-4 mb-4">
+                <div class="card shadow h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ business.name }}</h5>
+                        <p class="card-text text-muted">{{ business.description }}</p>
+                        <div class="mb-3">
+                            <strong>Balance:</strong>
+                            <span class="text-primary">₹{{ business.balance }}</span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Status:</strong>
+                            <span class="badge {% if business.is_active %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ 'Active' if business.is_active else 'Inactive' }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <div class="btn-group w-100">
+                            <a href="{{ url_for('main.business_qr', business_id=business.id) }}" class="btn btn-outline-primary">QR Code</a>
+                            <button class="btn btn-outline-secondary" onclick="editBusiness({{ business.id }})">Edit</button>
+                            <button class="btn btn-outline-danger" onclick="deleteBusiness({{ business.id }})">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-4">
+                        <h5 class="mb-3">No businesses yet</h5>
+                        <p class="text-muted mb-3">You haven't added any businesses yet. Create your first business to get started.</p>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addBusinessModal">
+                            <i class="bi bi-plus-circle me-1"></i> Add Business
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Add Business Modal -->
+    <div class="modal fade" id="addBusinessModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Business</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addBusinessForm" method="POST" action="{{ url_for('main.add_business') }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Business Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="initial_balance" class="form-label">Initial Balance</label>
+                            <input type="number" class="form-control" id="initial_balance" name="initial_balance" value="0">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" form="addBusinessForm" class="btn btn-primary">Add Business</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editBusiness(id) {
+    // Implement edit functionality
+    window.location.href = `/business/${id}/edit`;
+}
+
+function deleteBusiness(id) {
+    if (confirm('Are you sure you want to delete this business?')) {
+        fetch(`/business/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Error deleting business');
+            }
+        });
+    }
+}
+</script>
+{% endblock %} 

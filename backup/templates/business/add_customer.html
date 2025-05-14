@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Add New Customer{% endblock %}
+
+{% block header_title %}Add New Customer{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <form method="POST" action="{{ url_for('add_customer') }}">
+        <div class="form-group">
+            <label for="name" class="form-label">Customer Name</label>
+            <input type="text" class="form-input" id="name" name="name" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="phone" class="form-label">Phone Number</label>
+            <input type="tel" class="form-input" id="phone" name="phone" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="email" class="form-label">Email (Optional)</label>
+            <input type="email" class="form-input" id="email" name="email">
+        </div>
+        
+        <div class="form-group">
+            <label for="address" class="form-label">Address (Optional)</label>
+            <textarea class="form-input" id="address" name="address" rows="2"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="initial_credit" class="form-label">Initial Credit Amount (if any)</label>
+            <div class="input-with-prefix">
+                <span class="input-prefix">₹</span>
+                <input type="number" class="form-input" id="initial_credit" name="initial_credit" value="0" min="0" step="0.01">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="notes" class="form-label">Additional Notes</label>
+            <textarea class="form-input" id="notes" name="notes" rows="3"></textarea>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Customer</button>
+            <a href="{{ url_for('business_dashboard') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.form-container {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 25px;
+    margin-bottom: 30px;
+}
+
+.input-with-prefix {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-prefix {
+    position: absolute;
+    left: 12px;
+    font-weight: bold;
+    color: var(--text-color);
+}
+
+.input-with-prefix .form-input {
+    padding-left: 25px;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+{% endblock %} 

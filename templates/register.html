@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block header_title %}Register{% endblock %}
+
+{% block inline_css %}
+.register-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 80vh;
+    padding: 20px;
+}
+
+.app-logo {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.app-logo h1 {
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.app-logo p {
+    color: var(--text-muted);
+    margin-top: 5px;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.auth-card {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    width: 100%;
+    max-width: 430px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    transform: translateY(0);
+    transition: transform 0.3s, box-shadow 0.3s;
+    position: relative;
+}
+
+.auth-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+}
+
+.tab-selector {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .tab-selector {
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.tab-option {
+    flex: 1;
+    text-align: center;
+    padding: 18px 0;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    color: var(--text-muted);
+}
+
+.tab-option.active {
+    color: var(--text-color);
+    background-color: transparent;
+}
+
+.tab-option.active:after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: var(--primary-color);
+    border-radius: 3px 3px 0 0;
+}
+
+.tab-content {
+    padding: 30px;
+}
+
+.user-type-display {
+    margin-bottom: 24px;
+    padding: 14px;
+    border-radius: 12px;
+    background-color: var(--primary-light);
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-type-display i {
+    margin-right: 8px;
+    font-size: 18px;
+    color: var(--primary-color);
+}
+
+.form-group {
+    margin-bottom: 24px;
+    position: relative;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.form-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    font-size: 16px;
+    transition: all 0.3s;
+    background-color: var(--input-bg);
+    color: var(--input-text);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.form-input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.3s;
+    margin-bottom: 16px;
+    text-decoration: none;
+}
+
+.primary-btn {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: 0 4px 10px rgba(92, 103, 222, 0.3);
+}
+
+.primary-btn:hover {
+    box-shadow: 0 6px 15px rgba(92, 103, 222, 0.4);
+    transform: translateY(-2px);
+    filter: brightness(1.05);
+}
+
+.secondary-btn {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .secondary-btn {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.secondary-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .secondary-btn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.secondary-btn i {
+    color: var(--primary-color);
+}
+
+@media (max-width: 768px) {
+    .tab-content {
+        padding: 24px;
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .app-logo h1 {
+        font-size: 32px;
+    }
+}
+{% endblock %}
+
+{% block content %}
+<div class="register-container">
+    <div class="app-logo">
+        <h1>KathaPe</h1>
+        <p>Your Digital Credit Book</p>
+    </div>
+
+    <div class="auth-card">
+        <div class="tab-selector">
+            <div class="tab-option active" data-type="customer">
+                <i class="fas fa-user"></i> Customer
+            </div>
+            <div class="tab-option" data-type="business">
+                <i class="fas fa-store"></i> Business
+            </div>
+        </div>
+        
+        <div class="tab-content">
+            <div id="userTypeDisplay" class="user-type-display">
+                <i class="fas fa-user-circle"></i> Registering as: <span id="selectedTypeText">Customer</span>
+            </div>
+            
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="user_type" id="user_type" value="customer">
+                
+                <div class="form-group">
+                    <label for="name" class="form-label">Full Name</label>
+                    <input type="text" id="name" name="name" class="form-input" required placeholder="Enter your full name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone" class="form-label">Mobile Number</label>
+                    <input type="tel" id="phone" name="phone" class="form-input" required placeholder="Enter your mobile number">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" id="password" name="password" class="form-input" required placeholder="Create a password">
+                </div>
+                
+                <button type="submit" class="btn primary-btn">
+                    <i class="fas fa-user-plus"></i> Register
+                </button>
+                
+                <a href="{{ url_for('login') }}" class="btn secondary-btn">
+                    <i class="fas fa-sign-in-alt"></i> Already have an account? Login
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab selector functionality
+    const tabOptions = document.querySelectorAll('.tab-option');
+    const userTypeInput = document.getElementById('user_type');
+    const selectedTypeText = document.getElementById('selectedTypeText');
+    const userTypeDisplay = document.getElementById('userTypeDisplay');
+    
+    // Function to update the form based on selected user type
+    function updateUserType(type) {
+        // Update hidden input value
+        userTypeInput.value = type;
+        
+        // Update the display text
+        selectedTypeText.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+        
+        // Update icon in the user type display
+        if (type === 'customer') {
+            userTypeDisplay.innerHTML = '<i class="fas fa-user-circle"></i> Registering as: <span id="selectedTypeText">Customer</span>';
+        } else {
+            userTypeDisplay.innerHTML = '<i class="fas fa-store"></i> Registering as: <span id="selectedTypeText">Business</span>';
+        }
+        
+        // Update tab UI
+        tabOptions.forEach(opt => {
+            if (opt.dataset.type === type) {
+                opt.classList.add('active');
+            } else {
+                opt.classList.remove('active');
+            }
+        });
+    }
+    
+    // Initialize the form
+    updateUserType('customer');
+    
+    // Add click event listeners
+    tabOptions.forEach(option => {
+        option.addEventListener('click', function() {
+            updateUserType(this.dataset.type);
+        });
+    });
+    
+    // Extra check before submitting the form
+    document.querySelector('form').addEventListener('submit', function(e) {
+        console.log("Form submitted with user_type:", userTypeInput.value);
+    });
+</script>
+{% endblock %} 

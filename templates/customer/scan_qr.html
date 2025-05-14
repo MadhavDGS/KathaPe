@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Scan QR Code{% endblock %}
+
+{% block header_title %}Scan QR Code{% endblock %}
+
+{% block content %}
+<div class="scanner-container">
+    <div class="scanner-card">
+        <div class="scanner-header">
+            <h2>Scan Business QR Code</h2>
+            <p>Point your camera at the business QR code to connect</p>
+        </div>
+        
+        <div class="video-container">
+            <video id="qr-video" autoplay playsinline></video>
+            <div class="scan-region-highlight"></div>
+            <div class="scan-message">Scanning...</div>
+        </div>
+        
+        <div class="scanner-footer">
+            <button id="flip-camera" class="btn btn-secondary">
+                <i class="fas fa-sync"></i> Flip Camera
+            </button>
+            <a href="{{ url_for('select_business') }}" class="btn back-button">
+                <i class="fas fa-keyboard"></i> Enter PIN Instead
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/microcamera/dist/microcamera.min.css">
+{% endblock %}
+
+{% block inline_css %}
+.scanner-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 70vh;
+}
+
+.scanner-card {
+    background-color: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    width: 100%;
+    max-width: 450px;
+    overflow: hidden;
+}
+
+.scanner-header {
+    padding: 20px;
+    background-color: var(--primary-color);
+    color: var(--white);
+    text-align: center;
+}
+
+.scanner-header h2 {
+    margin-bottom: 10px;
+    font-size: 1.5rem;
+}
+
+.scanner-header p {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.video-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 100%;
+    overflow: hidden;
+}
+
+#qr-video {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scan-region-highlight {
+    position: absolute;
+    border: 2px solid var(--accent-color);
+    border-radius: 10px;
+    top: 20%;
+    left: 20%;
+    width: 60%;
+    height: 60%;
+    box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+.scan-message {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    text-align: center;
+    padding: 10px;
+    font-size: 14px;
+}
+
+.scanner-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #eee;
+}
+
+.back-button {
+    background-color: var(--accent-color);
+}
+
+#flip-camera {
+    background-color: transparent;
+    color: var(--text-color);
+    border: 1px solid #ddd;
+}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const video = document.getElementById('qr-video');
+        const scanMessage = document.querySelector('.scan-message');
+        const flipButton = document.getElementById('flip-camera');
+        
+        let currentCamera = 'environment'; // Start with back camera
+        
+        // Initialize QR Scanner
+        const html5QrCode = new Html5Qrcode("qr-video", { formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] });
+        const config = { fps: 10, qrbox: {width: 250, height: 250} };
+        
+        // Start scanner with back camera by default
+        startScanner();
+        
+        // Function to start the scanner
+        function startScanner() {
+            html5QrCode.start(
+                { facingMode: currentCamera },
+                config,
+                onQRCodeSuccess,
+                onQRCodeError
+            ).catch(err => {
+                scanMessage.textContent = 'Camera access error: ' + err;
+            });
+        }
+        
+        // Success callback when QR code is scanned
+        function onQRCodeSuccess(decodedText, decodedResult) {
+            // Stop scanning
+            html5QrCode.stop();
+            
+            scanMessage.textContent = 'QR Code detected! Connecting...';
+            
+            // Process the QR code data
+            // Format is expected to be "business:ACCESS_PIN"
+            if (decodedText.startsWith('business:')) {
+                const accessPin = decodedText.split(':')[1];
+                
+                // Submit the PIN programmatically
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = "{{ url_for('select_business') }}";
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'access_pin';
+                input.value = accessPin;
+                
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+            } else {
+                scanMessage.textContent = 'Invalid QR Code. Please try again.';
+                // Restart scanner after a brief delay
+                setTimeout(() => startScanner(), 2000);
+            }
+        }
+        
+        // Error callback
+        function onQRCodeError(error) {
+            // Just continue scanning
+        }
+        
+        // Flip camera button
+        flipButton.addEventListener('click', function() {
+            html5QrCode.stop().then(() => {
+                currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+                startScanner();
+            });
+        });
+    });
+</script>
+{% endblock %} 

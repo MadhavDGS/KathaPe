@@ -1,0 +1,21 @@
+# Supabase Connection Settings
+SUPABASE_URL=https://ghbmfgomnqmffixfkdyp.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYm1mZ29tbnFtZmZpeGZrZHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNDAxNTcsImV4cCI6MjA2MjcxNjE1N30.Fw750xiDWVPrl6ssr9p6AJTt--8zvnPoboxJiURvsOI
+# You need to replace this with your actual service role key from Supabase
+# The current key is an anon key, not a service role key
+# Your service role key should contain "role":"service_role" in the JWT payload
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYm1mZ29tbnFtZmZpeGZrZHlwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzE0MDE1NywiZXhwIjoyMDYyNzE2MTU3fQ.RnbSqdIM5A67NuKHDOTdpqpu6G2zKJfhMeQapGUI2kw
+
+# Flask Configuration
+SECRET_KEY=your-flask-secret-key
+DEBUG=true
+PORT=5002
+
+# Application Configuration
+AUTO_CREATE_USERS=true
+UPLOAD_FOLDER=static/uploads
+QR_CODES_FOLDER=static/qr_codes
+
+# The service key is particularly important for row-level security bypass
+# Make sure to get this from your Supabase dashboard under Project Settings > API
+# Use the "service_role" key, not the "anon" key for admin operations 

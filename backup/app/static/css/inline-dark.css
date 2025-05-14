@@ -1,0 +1,36 @@
+/* Direct inline CSS for dark mode */
+body {
+    background-color: #121212 !important;
+    color: #ffffff !important;
+    font-family: Arial, sans-serif;
+}
+
+.container {
+    background-color: #1e1e1e !important;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px auto;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: #2ecc71 !important;
+}
+
+a {
+    color: #2ecc71 !important;
+}
+
+.card {
+    background-color: #2a2a2a !important;
+    border: 1px solid #333333 !important;
+    color: #ffffff !important;
+}
+
+.btn-primary {
+    background-color: #2ecc71 !important;
+    border-color: #2ecc71 !important;
+}
+
+.text-muted {
+    color: #b3b3b3 !important;
+} 

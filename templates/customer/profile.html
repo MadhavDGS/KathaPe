@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Profile{% endblock %}
+
+{% block header_title %}Your Profile{% endblock %}
+
+{% block inline_css %}
+.profile-container {
+    padding-bottom: 30px;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.profile-card {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    margin-bottom: 20px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.profile-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+}
+
+.profile-header {
+    background: var(--primary-gradient);
+    color: white;
+    padding: 20px 30px;
+}
+
+.profile-header h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.profile-body {
+    padding: 30px;
+}
+
+.form-group {
+    margin-bottom: 24px;
+    position: relative;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.form-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    font-size: 16px;
+    transition: all 0.3s;
+    background-color: var(--input-bg);
+    color: var(--input-text);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.form-input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+textarea.form-input {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.form-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
+
+.profile-preview {
+    margin-top: 12px;
+    display: inline-block;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid var(--primary-color);
+}
+
+.profile-preview img {
+    display: block;
+    max-width: 120px;
+    height: auto;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 24px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-decoration: none;
+}
+
+.btn i {
+    margin-right: 8px;
+}
+
+.primary-btn {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: 0 4px 10px rgba(92, 103, 222, 0.3);
+}
+
+.primary-btn:hover {
+    box-shadow: 0 6px 15px rgba(92, 103, 222, 0.4);
+    transform: translateY(-2px);
+}
+
+.secondary-btn {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-muted);
+}
+
+[data-theme="dark"] .secondary-btn {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.secondary-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .secondary-btn:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 768px) {
+    .profile-body {
+        padding: 20px;
+    }
+    
+    .profile-header {
+        padding: 15px 20px;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+    }
+}
+{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <div class="profile-card">
+        <div class="profile-header">
+            <h2>Edit Your Profile</h2>
+        </div>
+        
+        <div class="profile-body">
+            <form method="POST" action="{{ url_for('customer_profile') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="name" class="form-label">Full Name</label>
+                    <input type="text" class="form-input" id="name" name="name" value="{{ customer.name }}" required placeholder="Enter your name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone" class="form-label">Phone Number</label>
+                    <input type="tel" class="form-input" id="phone" name="phone" value="{{ customer.phone_number }}" required placeholder="Enter your phone number">
+                </div>
+                
+                <div class="form-group">
+                    <label for="whatsapp" class="form-label">WhatsApp Number</label>
+                    <input type="tel" class="form-input" id="whatsapp" name="whatsapp" value="{{ customer.whatsapp_number or '' }}" placeholder="Enter your WhatsApp number">
+                    <div class="form-hint">Include country code (e.g., +91)</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email" class="form-label">Email Address</label>
+                    <input type="email" class="form-input" id="email" name="email" value="{{ customer.email or '' }}" placeholder="Enter your email address">
+                </div>
+                
+                <div class="form-group">
+                    <label for="address" class="form-label">Address</label>
+                    <textarea class="form-input" id="address" name="address" placeholder="Enter your address">{{ customer.address or '' }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="profile_photo" class="form-label">Profile Photo</label>
+                    <input type="file" class="form-input" id="profile_photo" name="profile_photo">
+                    
+                    {% if customer.profile_photo_url %}
+                    <div class="profile-preview">
+                        <img src="{{ customer.profile_photo_url }}" alt="Profile Photo">
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="action-buttons">
+                    <button type="submit" class="btn primary-btn">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                    <a href="{{ url_for('customer_dashboard') }}" class="btn secondary-btn">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

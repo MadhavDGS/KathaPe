@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khata - Dark Index</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        h1, h2, h3 {
+            color: #2ecc71;
+        }
+        
+        .card {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: #2ecc71;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            background-color: #27ae60;
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid #2ecc71;
+            color: #2ecc71;
+        }
+        
+        .btn-outline:hover {
+            background-color: #2ecc71;
+            color: white;
+        }
+        
+        .text-muted {
+            color: #b3b3b3;
+        }
+        
+        a {
+            color: #2ecc71;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+        }
+        
+        .col {
+            flex: 1;
+            padding: 0 10px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .col {
+                flex: 100%;
+            }
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+            color: #b3b3b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Welcome to Khata</h1>
+            <p>Your all-in-one solution for managing business transactions</p>
+        </header>
+        
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <h2>Business Owner</h2>
+                    <p>Manage your shop's transactions and customer credits</p>
+                    <p>
+                        <a href="/auth/login?user_type=business" class="btn">Login as Business</a>
+                        <a href="/auth/register?user_type=business" class="btn btn-outline">Register as Business</a>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="col">
+                <div class="card">
+                    <h2>Customer</h2>
+                    <p>View and manage your credits with local shops</p>
+                    <p>
+                        <a href="/auth/login?user_type=customer" class="btn">Login as Customer</a>
+                        <a href="/auth/register?user_type=customer" class="btn btn-outline">Register as Customer</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Key Features</h2>
+            <div class="row">
+                <div class="col">
+                    <h3>Track Transactions</h3>
+                    <p>Easily record and manage all your business transactions.</p>
+                </div>
+                
+                <div class="col">
+                    <h3>Multiple Businesses</h3>
+                    <p>Manage multiple businesses from a single dashboard.</p>
+                </div>
+                
+                <div class="col">
+                    <h3>Mobile First</h3>
+                    <p>Access your data from anywhere, on any device.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div>
+            <p>Test pages:</p>
+            <ul>
+                <li><a href="/test">Test Page</a></li>
+                <li><a href="/dark">Guaranteed Dark Page</a></li>
+                <li><a href="/ultra">Ultra Simple Page</a></li>
+            </ul>
+        </div>
+        
+        <footer>
+            <p>© 2024 Khata. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html> 
