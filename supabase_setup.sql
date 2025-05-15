@@ -94,3 +94,37 @@ CREATE TRIGGER update_balance_trigger
 AFTER INSERT ON transactions
 FOR EACH ROW
 EXECUTE FUNCTION update_balance_on_transaction();
+
+-- Create function to get customer credits with business details
+CREATE OR REPLACE FUNCTION get_customer_credits_with_business_details(p_customer_id UUID)
+RETURNS TABLE (
+    id UUID,
+    customer_id UUID,
+    business_id UUID,
+    current_balance NUMERIC(10, 2),
+    created_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    business_name TEXT,
+    business_description TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY 
+  SELECT 
+    cc.id,
+    cc.customer_id,
+    cc.business_id,
+    cc.current_balance,
+    cc.created_at,
+    cc.updated_at,
+    b.name as business_name,
+    b.description as business_description
+  FROM 
+    customer_credits cc
+    JOIN businesses b ON cc.business_id = b.id
+  WHERE 
+    cc.customer_id = p_customer_id;
+END;
+$$;
