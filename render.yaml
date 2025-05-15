@@ -3,7 +3,7 @@ services:
     name: kathape
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --workers=1 --threads=2 --timeout=60
     envVars:
       - key: SUPABASE_URL
         value: https://xhczvjwwmrvmcbwjxpxd.supabase.co
@@ -15,5 +15,7 @@ services:
         value: fc36290a52f89c1c92655b7d22b198e4
       - key: UPLOAD_FOLDER
         value: static/uploads
+      - key: RENDER
+        value: "true"
       - key: PORT
         value: 10000 
