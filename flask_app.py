@@ -13,9 +13,82 @@ from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
 import sys
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Check if running on Render
 RENDER_DEPLOYMENT = os.environ.get('RENDER', False)
+
+# Add request logging middleware
+class RequestLoggerMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        request_time = time.time()
+        path = environ.get('PATH_INFO', '')
+        method = environ.get('REQUEST_METHOD', '')
+        
+        logger.info(f"REQUEST START: {method} {path}")
+        
+        def custom_start_response(status, headers, exc_info=None):
+            duration = time.time() - request_time
+            logger.info(f"REQUEST END: {method} {path} - Status: {status} - Duration: {duration:.3f}s")
+            return start_response(status, headers, exc_info)
+        
+        try:
+            return self.app(environ, custom_start_response)
+        except Exception as e:
+            logger.error(f"CRITICAL ERROR: {method} {path} - {str(e)}")
+            logger.error(traceback.format_exc())
+            custom_start_response('500 Internal Server Error', [('Content-Type', 'text/html')])
+            error_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Error - KathaPe</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
+                    h1 {{ color: #e74c3c; }}
+                    .error-box {{ 
+                        background-color: #f8d7da; 
+                        border: 1px solid #f5c6cb; 
+                        border-radius: 5px; 
+                        padding: 20px; 
+                        margin: 20px auto; 
+                        max-width: 800px;
+                        text-align: left;
+                        overflow: auto;
+                    }}
+                    .btn {{ 
+                        display: inline-block; 
+                        background-color: #5c67de; 
+                        color: white; 
+                        padding: 10px 20px; 
+                        text-decoration: none; 
+                        border-radius: 5px; 
+                        margin-top: 20px; 
+                    }}
+                </style>
+            </head>
+            <body>
+                <h1>Server Error</h1>
+                <p>We encountered a problem processing your request.</p>
+                <div class="error-box">
+                    <strong>Error details:</strong><br>
+                    {str(e)}
+                    <hr>
+                    <pre>{traceback.format_exc()}</pre>
+                </div>
+                <a href="/" class="btn">Go Back Home</a>
+            </body>
+            </html>
+            """
+            return [error_html.encode('utf-8')]
 
 # Setup QR code functionality with fallback
 QR_AVAILABLE = False
@@ -118,6 +191,16 @@ load_dotenv()
 # Create Flask app first for faster startup
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
+
+# Apply our custom middleware
+app.wsgi_app = RequestLoggerMiddleware(app.wsgi_app)
+
+# Log important app config information
+print(f"DEBUG INFO: Flask app created with secret_key: {app.secret_key[:5]}...")
+print(f"DEBUG INFO: Debug mode: {app.debug}")
+print(f"DEBUG INFO: Testing mode: {app.testing}")
+print(f"DEBUG INFO: Environment: {app.env}")
+print(f"DEBUG INFO: RENDER_DEPLOYMENT: {RENDER_DEPLOYMENT}")
 
 # Environment variables - hardcoded for easy deployment
 os.environ.setdefault('SUPABASE_URL', 'https://xhczvjwwmrvmcbwjxpxd.supabase.co')
@@ -643,11 +726,13 @@ def login():
     if request.method == 'POST':
         try:
             print(f"DEBUG: Starting login process")
+            logger.info("User attempting to login")
             phone = request.form.get('phone')
             password = request.form.get('password')
             user_type = request.form.get('user_type', 'customer')
             
             print(f"DEBUG: Attempting login with phone={phone}, user_type={user_type}")
+            logger.info(f"Login attempt: phone={phone}, user_type={user_type}")
             
             if not phone or not password:
                 flash('Please enter both phone number and password', 'error')
@@ -661,37 +746,45 @@ def login():
             client = get_supabase_client()
             if not client:
                 # Handle database connection error
+                logger.error("Database connection error during login")
                 flash('Database connection error. Please try again later.', 'error')
                 return render_template('login.html')
             
             # Extra logging for Render
             if RENDER_DEPLOYMENT:
+                logger.info(f"RENDER: Starting user lookup for phone={phone}")
                 print(f"RENDER: Starting user lookup for phone={phone}")
                 start_time = time.time()
             
             # Directly execute query without timeout function for login
             try:
                 # Use minimal fields for better performance
+                logger.info("Executing Supabase query")
                 user_response = client.table('users').select('id,name,password,user_type').eq('phone_number', phone).execute()
                 
                 if RENDER_DEPLOYMENT:
                     elapsed_time = time.time() - start_time
+                    logger.info(f"RENDER: User lookup completed in {elapsed_time:.2f} seconds")
                     print(f"RENDER: User lookup completed in {elapsed_time:.2f} seconds")
                 
                 if not user_response or not user_response.data:
+                    logger.warning(f"Invalid credentials: User not found for phone={phone}")
                     flash('Invalid credentials: User not found', 'error')
                     return render_template('login.html')
                 
                 user = user_response.data[0]
                 user_id = user['id']
+                logger.info(f"Found user with ID {user_id}")
                 print(f"DEBUG: Found user with ID {user_id}")
                 
                 # Verify password
                 if user.get('password') != password:
+                    logger.warning(f"Invalid password for user {user_id}")
                     flash('Invalid password', 'error')
                     return render_template('login.html')
                 
                 # Set session data
+                logger.info(f"Setting session data for user {user_id}")
                 session['user_id'] = user_id
                 session['user_name'] = user.get('name', user_name)
                 session['user_type'] = user_type
@@ -699,6 +792,7 @@ def login():
                 
                 if RENDER_DEPLOYMENT:
                     # On Render: Minimal setup for faster page load
+                    logger.info("Login successful on Render - using minimal data setup")
                     flash('Login successful!', 'success')
                     
                     if user_type == 'business':
@@ -707,68 +801,36 @@ def login():
                         session['business_id'] = business_id
                         session['business_name'] = f"{user.get('name')}'s Business"
                         session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                        logger.info(f"Redirecting business user to dashboard with ID {business_id}")
                         return redirect(url_for('business_dashboard'))
                     else:
                         # Minimal session data, will fetch details in dashboard
                         customer_id = str(uuid.uuid4())
                         session['customer_id'] = customer_id
+                        logger.info(f"Redirecting customer to dashboard with ID {customer_id}")
                         return redirect(url_for('customer_dashboard'))
                 else:
                     # In development: Fetch full profile data
                     if user_type == 'business':
-                        # Try to get business record with minimal fields
-                        try:
-                            business_response = client.table('businesses').select('id,name,access_pin').eq('user_id', user_id).execute()
-                            
-                            if business_response and business_response.data:
-                                business = business_response.data[0]
-                                session['business_id'] = business['id']
-                                session['business_name'] = business.get('name', f"{user.get('name')}'s Business")
-                                session['access_pin'] = business.get('access_pin', f"{int(datetime.now().timestamp()) % 10000:04d}")
-                            else:
-                                # Create default business data
-                                business_id = str(uuid.uuid4())
-                                session['business_id'] = business_id
-                                session['business_name'] = f"{user.get('name')}'s Business"
-                                session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                        except Exception as e:
-                            print(f"Error fetching business data: {str(e)}")
-                            # Create default business data on error
-                            business_id = str(uuid.uuid4())
-                            session['business_id'] = business_id
-                            session['business_name'] = f"{user.get('name')}'s Business"
-                            session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                            
-                        flash('Login successful!', 'success')
+                        # Business redirect handling
+                        logger.info(f"Redirecting business user to dashboard (dev mode)")
                         return redirect(url_for('business_dashboard'))
                     else:
-                        # Try to get customer record with minimal fields
-                        try:
-                            customer_response = client.table('customers').select('id').eq('user_id', user_id).execute()
-                            
-                            if customer_response and customer_response.data:
-                                customer = customer_response.data[0]
-                                session['customer_id'] = customer['id']
-                            else:
-                                # Create default customer data
-                                customer_id = str(uuid.uuid4())
-                                session['customer_id'] = customer_id
-                        except Exception as e:
-                            print(f"Error fetching customer data: {str(e)}")
-                            # Create default customer data on error
-                            customer_id = str(uuid.uuid4())
-                            session['customer_id'] = customer_id
-                            
-                        flash('Login successful!', 'success')
+                        # Customer redirect handling  
+                        logger.info(f"Redirecting customer to dashboard (dev mode)")
                         return redirect(url_for('customer_dashboard'))
                     
             except Exception as e:
+                # Log any errors during login query execution
+                logger.error(f"Database query error: {str(e)}")
                 print(f"Database query error: {str(e)}")
                 traceback.print_exc()  # Print full traceback for debugging
                 flash('Login failed. Please try again later.', 'error')
                 return render_template('login.html')
                 
         except Exception as e:
+            # Log any uncaught exceptions during the login process
+            logger.critical(f"CRITICAL ERROR in login: {str(e)}")
             print(f"CRITICAL ERROR in login: {str(e)}")
             traceback.print_exc()
             
@@ -809,6 +871,8 @@ def login():
                 <div class="error-box">
                     <strong>Error details:</strong><br>
                     {str(e)}
+                    <hr>
+                    <pre>{traceback.format_exc()}</pre>
                 </div>
                 <a href="/login" class="btn">Try Again</a>
             </body>
