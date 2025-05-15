@@ -203,10 +203,10 @@ print(f"DEBUG INFO: Environment: {os.environ.get('FLASK_ENV', 'production')}")
 print(f"DEBUG INFO: RENDER_DEPLOYMENT: {RENDER_DEPLOYMENT}")
 
 # Environment variables - hardcoded for easy deployment
-os.environ.setdefault('SUPABASE_URL', 'https://xhczvjwwmrvmcbwjxpxd.supabase.co')
-os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTM3MTQwNTgsImV4cCI6MjAyOTI5MDA1OH0.xnG-kIOiY4xbB3_QnTJtLXvwxU-fkW2RKlJw2WUoRE8') 
-os.environ.setdefault('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcxMzcxNDA1OCwiZXhwIjoyMDI5MjkwMDU4fQ.PjOwIuDIx5a_d3u4C7cFDuOQP8NaOXQKQzH2iSXnSEA')
-os.environ.setdefault('DATABASE_URL', 'postgres://postgres.xhczvjwwmrvmcbwjxpxd:katha-database-password@aws-0-ap-south-1.pooler.supabase.com:5432/postgres')
+os.environ.setdefault('SUPABASE_URL', 'https://ghbmfgomnqmffixfkdyp.supabase.co')
+os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYm1mZ29tbnFtZmZpeGZrZHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNDAxNTcsImV4cCI6MjA2MjcxNjE1N30.Fw750xiDWVPrl6ssr9p6AJTt--8zvnPoboxJiURvsOI') 
+os.environ.setdefault('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYm1mZ29tbnFtZmZpeGZrZHlwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzE0MDE1NywiZXhwIjoyMDYyNzE2MTU3fQ.s0lgkOiUaNvJWWG2_LRm0fVoTCgcj1QrNz2Qv0zB0gI')
+os.environ.setdefault('DATABASE_URL', 'postgres://postgres.ghbmfgomnqmffixfkdyp:katha-database-password@aws-0-ap-south-1.pooler.supabase.com:5432/postgres')
 os.environ.setdefault('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
 os.environ.setdefault('UPLOAD_FOLDER', 'static/uploads')
 
@@ -806,7 +806,7 @@ def login():
                 sock.settimeout(5.0)  # 5 second timeout for connectivity check
                 
                 # Parse the Supabase URL to get the host
-                supabase_url = os.environ.get('SUPABASE_URL', 'https://xhczvjwwmrvmcbwjxpxd.supabase.co')
+                supabase_url = os.environ.get('SUPABASE_URL', 'https://ghbmfgomnqmffixfkdyp.supabase.co')
                 host = supabase_url.replace('https://', '').replace('http://', '').split('/')[0]
                 
                 try:
