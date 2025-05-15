@@ -652,12 +652,40 @@ def verify_password_directly(stored_password, provided_password):
 # Routes
 @app.route('/')
 def index():
-    if 'user_id' in session:
-        if session.get('user_type') == 'business':
-            return redirect(url_for('business_dashboard'))
-        else:
-            return redirect(url_for('customer_dashboard'))
-    return redirect(url_for('login'))
+    try:
+        # Super lightweight index route
+        logger.info("Index route accessed - redirecting to appropriate page")
+        
+        # If user is logged in, redirect to dashboard
+        if 'user_id' in session:
+            if session.get('user_type') == 'business':
+                return redirect(url_for('business_dashboard'))
+            else:
+                return redirect(url_for('customer_dashboard'))
+        
+        # Otherwise redirect to login (simple direct redirect)
+        return redirect(url_for('login'))
+    except Exception as e:
+        # In case of any error, render a minimal HTML page directly
+        logger.error(f"Error in index route: {str(e)}")
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>KathaPe</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0;url=/login">
+            <style>
+                body { font-family: Arial; text-align: center; padding: 50px; }
+            </style>
+        </head>
+        <body>
+            <h1>KathaPe</h1>
+            <p>Redirecting to login...</p>
+        </body>
+        </html>
+        """
+        return html
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -723,8 +751,9 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        try:
+    try:
+        if request.method == 'POST':
+            # Existing POST login code
             print(f"DEBUG: Starting login process")
             logger.info("User attempting to login")
             phone = request.form.get('phone')
@@ -950,8 +979,33 @@ def login():
             </html>
             """
             return html
-    
-    return render_template('login.html')
+    except Exception as e:
+        # Ultimate fallback for any errors
+        logger.critical(f"CRITICAL ERROR in login route: {str(e)}")
+        
+        # Ultra simple login form
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Emergency Login</title>
+            <style>body{font-family:sans-serif;margin:40px;text-align:center;}form{margin:20px;}</style>
+        </head>
+        <body>
+            <h1>KathaPe Emergency Login</h1>
+            <form method="post" action="/login">
+                <div><input name="phone" placeholder="Phone"></div>
+                <div><input name="password" placeholder="Password"></div>
+                <div>
+                    <label><input type="radio" name="user_type" value="customer" checked> Customer</label>
+                    <label><input type="radio" name="user_type" value="business"> Business</label>
+                </div>
+                <div><button type="submit">Login</button></div>
+            </form>
+        </body>
+        </html>
+        """
+        return html
 
 @app.route('/logout')
 def logout():
@@ -2283,6 +2337,16 @@ def api_status():
             "message": str(e),
             "traceback": traceback.format_exc()
         })
+
+# Add a simple heartbeat endpoint
+@app.route('/api/heartbeat')
+def heartbeat():
+    """Simple endpoint to check if the application is responsive"""
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "mode": "emergency" if os.environ.get('RENDER_EMERGENCY_LOGIN', 'false').lower() == 'true' else "normal"
+    })
 
 # Run the application
 if __name__ == '__main__':
