@@ -8,12 +8,11 @@ import sys
 # Ensure the current directory is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import the Flask app instance
-import app as app_module
-application = app_module.app
+# Import the Flask app directly
+from app import app
 
 # For gunicorn
-app = application
+application = app
 
 # This allows direct execution of this file
 if __name__ == "__main__":
