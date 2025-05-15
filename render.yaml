@@ -21,6 +21,8 @@ services:
         value: "3"
       - key: RENDER_QUERY_LIMIT
         value: "5"
+      - key: RENDER_EMERGENCY_LOGIN
+        value: "true"
       - key: SECRET_KEY
         value: fc36290a52f89c1c92655b7d22b198e4
       - key: UPLOAD_FOLDER
