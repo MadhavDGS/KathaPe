@@ -1,1 +1,1 @@
-web: gunicorn app_bridge:application --timeout 60 --no-sendfile 
+web: gunicorn app:app --timeout 60 --no-sendfile 
