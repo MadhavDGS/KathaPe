@@ -28,6 +28,60 @@ if not RENDER_DEPLOYMENT:
         print(f"QR code generation not available: {str(e)}")
 else:
     print("Running on Render - QR code generation disabled")
+    
+# On Render, completely disable some heavy features
+if RENDER_DEPLOYMENT:
+    print("RENDER MODE: Optimizing for low CPU usage")
+    # Disable PIL completely to save memory
+    Image = None
+    qrcode = None
+    
+    # Reduce timeout values further
+    DB_RETRY_ATTEMPTS = 1
+    DB_RETRY_DELAY = 0.5
+    DB_QUERY_TIMEOUT = 2
+    
+    # Mock QR code function to avoid any QR processing
+    def generate_business_qr_code(business_id, access_pin):
+        return "static/images/placeholder_qr.png"
+else:
+    # Normal settings for development
+    DB_RETRY_ATTEMPTS = 3
+    DB_RETRY_DELAY = 1  # seconds
+    DB_QUERY_TIMEOUT = 5  # seconds
+    
+    # Function to generate QR code for business with explicit error handling (only for non-Render)
+    def generate_business_qr_code(business_id, access_pin):
+        try:
+            # If QR code generation is not available, return placeholder
+            if not QR_AVAILABLE:
+                print("QR code generation not available, using placeholder")
+                return "static/images/placeholder_qr.png"
+            
+            qr_data = f"business:{access_pin}"
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            
+            img = qr.make_image(fill_color="black", back_color="white")
+            qr_folder = app.config['QR_CODES_FOLDER']
+            
+            # Ensure the directory exists
+            if not os.path.exists(qr_folder):
+                os.makedirs(qr_folder)
+                
+            qr_filename = os.path.join(qr_folder, f"{business_id}.png")
+            img.save(qr_filename)
+            return qr_filename
+        except Exception as e:
+            print(f"Error generating QR code: {str(e)}")
+            # Return a default path that should exist
+            return "static/images/placeholder_qr.png"
 
 # Import Supabase first to ensure it's available globally
 try:
@@ -121,19 +175,6 @@ app.config['UPLOAD_FOLDER'] = upload_folder
 app.config['QR_CODES_FOLDER'] = qr_folder
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
-# Retry settings for database connections - reduced for Render
-if RENDER_DEPLOYMENT:
-    # Minimal settings for Render to avoid timeout
-    DB_RETRY_ATTEMPTS = 1
-    DB_RETRY_DELAY = 0.5  # seconds
-    DB_QUERY_TIMEOUT = 3  # seconds
-    print("Using minimal DB connection settings for Render")
-else:
-    # Normal settings for development
-    DB_RETRY_ATTEMPTS = 3
-    DB_RETRY_DELAY = 1  # seconds
-    DB_QUERY_TIMEOUT = 5  # seconds
-
 # Supabase clients
 supabase_client = None
 supabase_admin_client = None
@@ -158,6 +199,11 @@ def safe_uuid(id_value):
 # Supabase client function with version-compatible options
 def get_supabase_client():
     global supabase_client, create_client
+    
+    # On Render, always use mock data for now to avoid timeouts 
+    if RENDER_DEPLOYMENT:
+        print("RENDER DEPLOYMENT: Using mock data instead of Supabase to avoid timeouts")
+        return None
     
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
@@ -300,6 +346,11 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
     """
     Safely query a Supabase table with proper error handling
     """
+    # On Render, always use mock data to prevent timeouts
+    if RENDER_DEPLOYMENT:
+        print(f"RENDER MODE: Using mock data for {table_name} ({query_type})")
+        return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+    
     try:
         # Get Supabase client
         client = get_supabase_client()
@@ -381,6 +432,16 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
 # Timeout-aware database query function
 def timeout_query(func, *args, **kwargs):
     """Run a database query with a timeout to prevent worker hanging"""
+    # On Render, skip threading for timeouts as it can cause issues
+    if RENDER_DEPLOYMENT:
+        try:
+            print("RENDER: Running database query without timeout protection")
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f"Database query error: {str(e)}")
+            return None
+    
+    # Use threading approach for non-Render environments
     result = [None]
     error = [None]
     completed = [False]
@@ -405,51 +466,6 @@ def timeout_query(func, *args, **kwargs):
         print(f"Database query error: {str(error[0])}")
         return None
     return result[0]
-
-# Function to generate QR code for business with explicit error handling
-def generate_business_qr_code(business_id, access_pin):
-    try:
-        # When on Render, always return a placeholder to save CPU
-        if RENDER_DEPLOYMENT:
-            return "static/images/placeholder_qr.png"
-            
-        # If QR code generation is not available, return placeholder
-        if not QR_AVAILABLE:
-            print("QR code generation not available, using placeholder")
-            return "static/images/placeholder_qr.png"
-        
-        qr_data = f"business:{access_pin}"
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(qr_data)
-        qr.make(fit=True)
-        
-        img = qr.make_image(fill_color="black", back_color="white")
-        qr_folder = app.config['QR_CODES_FOLDER']
-        
-        # Ensure the directory exists
-        if not os.path.exists(qr_folder):
-            os.makedirs(qr_folder)
-            
-        qr_filename = os.path.join(qr_folder, f"{business_id}.png")
-        img.save(qr_filename)
-        return qr_filename
-    except Exception as e:
-        print(f"Error generating QR code: {str(e)}")
-        # Create a text-based placeholder if we can't generate an image
-        try:
-            placeholder_path = "static/images/placeholder_qr.html"
-            if not os.path.exists(placeholder_path):
-                with open(placeholder_path, "w") as f:
-                    f.write(f"<div style='border:1px solid black; padding:10px; width:150px; height:150px; text-align:center;'>QR Code<br>Business: {access_pin}</div>")
-            return placeholder_path
-        except:
-            # Return a default path that should exist
-            return "static/images/placeholder_qr.png"
 
 # Authentication decorator
 def login_required(f):
