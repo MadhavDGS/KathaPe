@@ -31,15 +31,17 @@ else:
     
 # On Render, configure optimized settings
 if RENDER_DEPLOYMENT:
-    print("RENDER MODE: Optimizing for low CPU usage")
+    print("RENDER MODE: Optimizing for improved performance")
     # Disable PIL completely to save memory
     Image = None
     qrcode = None
     
-    # Reduce timeout values for better performance
+    # Aggressive performance settings for Render
     DB_RETRY_ATTEMPTS = 1
     DB_RETRY_DELAY = 0.5
     DB_QUERY_TIMEOUT = 3
+    RENDER_QUERY_LIMIT = 10  # Limit number of results returned in queries
+    RENDER_DASHBOARD_LIMIT = 5  # Limit items shown on dashboard
     
     # Mock QR code function to avoid any QR processing
     def generate_business_qr_code(business_id, access_pin):
@@ -49,6 +51,8 @@ else:
     DB_RETRY_ATTEMPTS = 3
     DB_RETRY_DELAY = 1  # seconds
     DB_QUERY_TIMEOUT = 5  # seconds
+    RENDER_QUERY_LIMIT = 50  # Higher limit for local development
+    RENDER_DASHBOARD_LIMIT = 10  # Higher limit for local development
     
     # Function to generate QR code for business with explicit error handling (only for non-Render)
     def generate_business_qr_code(business_id, access_pin):
@@ -193,17 +197,28 @@ def get_supabase_client():
                 if not create_client:
                     from supabase import create_client
                 
-                # Version-compatible options handling
+                # Version-compatible options handling with optimizations for Render
                 if HAS_CLIENT_OPTIONS:
                     try:
                         from supabase.lib.client_options import ClientOptions
-                        # Try with ClientOptions but without timeout
-                        options = ClientOptions(
-                            schema="public",
-                            headers={},
-                            auto_refresh_token=True,
-                            persist_session=True
-                        )
+                        
+                        # Configure options based on environment
+                        if RENDER_DEPLOYMENT:
+                            # Minimal options for Render
+                            options = ClientOptions(
+                                schema="public",
+                                headers={},
+                                auto_refresh_token=False,  # Don't auto refresh for better performance
+                                persist_session=False      # Don't persist sessions on Render
+                            )
+                        else:
+                            # Full options for development
+                            options = ClientOptions(
+                                schema="public",
+                                headers={},
+                                auto_refresh_token=True,
+                                persist_session=True
+                            )
                     except Exception as e:
                         print(f"Error creating ClientOptions: {str(e)}")
                         options = {}  # Fallback to empty dict
@@ -304,7 +319,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 # Safe query wrapper for Supabase - direct implementation to avoid imported function issues
-def query_table(table_name, query_type='select', fields='*', filters=None, data=None):
+def query_table(table_name, query_type='select', fields='*', filters=None, data=None, limit=None):
     """
     Safely query a Supabase table with proper error handling
     """
@@ -337,6 +352,12 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
                         query = query.neq(field, value)
                     # Add other operators as needed
             
+            # Apply query limit based on environment
+            if limit:
+                query = query.limit(limit)
+            elif RENDER_DEPLOYMENT:
+                query = query.limit(RENDER_QUERY_LIMIT)
+                
             result = query.execute()
             return result
         
@@ -393,11 +414,18 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
 # Timeout-aware database query function
 def timeout_query(func, *args, **kwargs):
     """Run a database query with a timeout to prevent worker hanging"""
-    # On Render, skip threading for timeouts as it can cause issues
+    # On Render, skip threading for timeouts but apply a shorter timeout
     if RENDER_DEPLOYMENT:
         try:
-            print("RENDER: Running database query without timeout protection")
-            return func(*args, **kwargs)
+            print("RENDER: Running database query with direct execution")
+            # Set a shorter timeout using the DB_QUERY_TIMEOUT constant
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            elapsed_time = time.time() - start_time
+            
+            # Log performance data for optimization
+            print(f"RENDER: Query completed in {elapsed_time:.2f} seconds")
+            return result
         except Exception as e:
             print(f"Database query error: {str(e)}")
             return None
@@ -828,69 +856,160 @@ def business_dashboard():
         transactions = []
         customers = []
         
-        try:
-            # Get customer credits to display customers on dashboard
-            customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
-            customer_credits = customers_response.data if customers_response and customers_response.data else []
-            
-            # Total customers
-            total_customers = len(customer_credits)
-            
-            # Get customer details for each customer credit
-            for credit in customer_credits:
-                customer_id = safe_uuid(credit.get('customer_id'))
+        # Use different loading strategies based on environment
+        if RENDER_DEPLOYMENT:
+            # On Render: Load minimal essential data for dashboard with strict limits
+            try:
+                # Get customer count - simple and fast count query
+                customers_response = query_table('customer_credits', 
+                                             fields='id', 
+                                             filters=[('business_id', 'eq', business_id)])
+                total_customers = len(customers_response.data) if customers_response and customers_response.data else 0
+                
+                # Get just a few customers for display
+                credited_customers_response = query_table('customer_credits', 
+                                                     filters=[('business_id', 'eq', business_id)],
+                                                     limit=RENDER_DASHBOARD_LIMIT)
+                
+                if credited_customers_response and credited_customers_response.data:
+                    # Get simplified customer data for each of these credits (limited)
+                    for credit in credited_customers_response.data:
+                        customer_id = safe_uuid(credit.get('customer_id'))
+                        try:
+                            customer_response = query_table('customers', 
+                                                        fields='id,name,phone_number', 
+                                                        filters=[('id', 'eq', customer_id)])
+                            if customer_response and customer_response.data:
+                                customer = customer_response.data[0]
+                                # Merge with minimal data
+                                customer_with_credit = {
+                                    'id': customer.get('id'),
+                                    'name': customer.get('name', 'Unknown'),
+                                    'phone_number': customer.get('phone_number', 'Unknown'),
+                                    'current_balance': credit.get('current_balance', 0)
+                                }
+                                customers.append(customer_with_credit)
+                        except Exception as e:
+                            print(f"ERROR retrieving customer {customer_id}: {str(e)}")
+                
+                # Get a few recent transactions
+                transactions_response = query_table('transactions', 
+                                              filters=[('business_id', 'eq', business_id)],
+                                              limit=RENDER_DASHBOARD_LIMIT)
+                
+                if transactions_response and transactions_response.data:
+                    transactions = transactions_response.data
+                    
+                    # Get basic customer names for these transactions with a single query
+                    customer_ids = [tx.get('customer_id') for tx in transactions if tx.get('customer_id')]
+                    if customer_ids:
+                        # Get all customers in a single query instead of multiple queries
+                        customers_map = {}
+                        for customer_id in customer_ids:
+                            customer_response = query_table('customers', 
+                                                        fields='id,name', 
+                                                        filters=[('id', 'eq', customer_id)])
+                            if customer_response and customer_response.data:
+                                customers_map[customer_response.data[0].get('id')] = customer_response.data[0].get('name', 'Unknown')
+                        
+                        # Apply customer names to transactions
+                        for transaction in transactions:
+                            cust_id = transaction.get('customer_id')
+                            transaction['customer_name'] = customers_map.get(cust_id, 'Unknown')
+                
+                # Get credit and payment totals with simple queries
                 try:
-                    customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
-                    if customer_response and customer_response.data:
-                        customer = customer_response.data[0]
-                        # Merge customer details with credit information
-                        customer_with_credit = {
-                            **customer,
-                            'current_balance': credit.get('current_balance', 0)
-                        }
-                        customers.append(customer_with_credit)
+                    credit_sum_response = query_table('transactions', 
+                                                fields='amount', 
+                                                filters=[('business_id', 'eq', business_id), 
+                                                        ('transaction_type', 'eq', 'credit')],
+                                                limit=100)  # Limit but enough to get summary totals
+                    
+                    if credit_sum_response and credit_sum_response.data:
+                        total_credit = sum([float(t.get('amount', 0)) for t in credit_sum_response.data])
                 except Exception as e:
-                    print(f"ERROR retrieving customer {customer_id}: {str(e)}")
-            
-        except Exception as e:
-            print(f"ERROR getting customers count: {str(e)}")
-        
-        try:
-            # Total credit
-            credit_response = query_table('transactions', fields='amount', 
-                                        filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
-            total_credit = sum([t.get('amount', 0) for t in credit_response.data]) if credit_response and credit_response.data else 0
-        except Exception as e:
-            print(f"ERROR getting credit total: {str(e)}")
-        
-        try:
-            # Total payments
-            payment_response = query_table('transactions', fields='amount',
-                                        filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
-            total_payments = sum([t.get('amount', 0) for t in payment_response.data]) if payment_response and payment_response.data else 0
-        except Exception as e:
-            print(f"ERROR getting payment total: {str(e)}")
-        
-        try:
-            # Recent transactions
-            transactions_response = query_table('transactions', 
-                                            filters=[('business_id', 'eq', business_id)])
-            transactions = transactions_response.data if transactions_response and transactions_response.data else []
-            
-            # Get customer names for transactions
-            for transaction in transactions:
-                customer_id = safe_uuid(transaction.get('customer_id'))
+                    print(f"ERROR getting credit total: {str(e)}")
+                
                 try:
-                    customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
-                    if customer_response and customer_response.data:
-                        transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
-                    else:
+                    payment_sum_response = query_table('transactions', 
+                                                  fields='amount', 
+                                                  filters=[('business_id', 'eq', business_id), 
+                                                          ('transaction_type', 'eq', 'payment')],
+                                                  limit=100)  # Limit but enough to get summary totals
+                    
+                    if payment_sum_response and payment_sum_response.data:
+                        total_payments = sum([float(t.get('amount', 0)) for t in payment_sum_response.data])
+                except Exception as e:
+                    print(f"ERROR getting payment total: {str(e)}")
+                    
+            except Exception as e:
+                print(f"ERROR in Render optimized data loading: {str(e)}")
+                
+        else:
+            # In development: Load complete data with more detailed queries
+            try:
+                # Get customer credits to display customers on dashboard
+                customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
+                customer_credits = customers_response.data if customers_response and customers_response.data else []
+                
+                # Total customers
+                total_customers = len(customer_credits)
+                
+                # Get customer details for each customer credit
+                for credit in customer_credits:
+                    customer_id = safe_uuid(credit.get('customer_id'))
+                    try:
+                        customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
+                        if customer_response and customer_response.data:
+                            customer = customer_response.data[0]
+                            # Merge customer details with credit information
+                            customer_with_credit = {
+                                **customer,
+                                'current_balance': credit.get('current_balance', 0)
+                            }
+                            customers.append(customer_with_credit)
+                    except Exception as e:
+                        print(f"ERROR retrieving customer {customer_id}: {str(e)}")
+                
+            except Exception as e:
+                print(f"ERROR getting customers count: {str(e)}")
+            
+            try:
+                # Total credit
+                credit_response = query_table('transactions', fields='amount', 
+                                            filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
+                total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
+            except Exception as e:
+                print(f"ERROR getting credit total: {str(e)}")
+            
+            try:
+                # Total payments
+                payment_response = query_table('transactions', fields='amount',
+                                            filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
+                total_payments = sum([float(t.get('amount', 0)) for t in payment_response.data]) if payment_response and payment_response.data else 0
+            except Exception as e:
+                print(f"ERROR getting payment total: {str(e)}")
+            
+            try:
+                # Recent transactions
+                transactions_response = query_table('transactions', 
+                                                filters=[('business_id', 'eq', business_id)])
+                transactions = transactions_response.data if transactions_response and transactions_response.data else []
+                
+                # Get customer names for transactions
+                for transaction in transactions:
+                    customer_id = safe_uuid(transaction.get('customer_id'))
+                    try:
+                        customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
+                        if customer_response and customer_response.data:
+                            transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
+                        else:
+                            transaction['customer_name'] = 'Unknown'
+                    except Exception as e:
+                        print(f"ERROR getting customer name: {str(e)}")
                         transaction['customer_name'] = 'Unknown'
-                except Exception as e:
-                    print(f"ERROR getting customer name: {str(e)}")
-                    transaction['customer_name'] = 'Unknown'
-        except Exception as e:
-            print(f"ERROR getting transactions: {str(e)}")
+            except Exception as e:
+                print(f"ERROR getting transactions: {str(e)}")
         
         # Generate QR code (placeholder on Render) 
         try:
@@ -1454,26 +1573,71 @@ def customer_dashboard():
     businesses = []
     
     try:
-        businesses_response = query_table('customer_credits', filters=[('customer_id', 'eq', customer_id)])
-        credit_records = businesses_response.data if businesses_response and businesses_response.data else []
-        
-        # For each credit record, get the business details
-        for credit in credit_records:
-            business_id = credit.get('business_id')
-            if business_id:
-                business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
-                if business_response and business_response.data:
-                    business = business_response.data[0]
-                    # Merge business data with credit data
-                    business_with_credit = {**business, 'current_balance': credit.get('current_balance', 0)}
+        # Use different loading strategies based on environment
+        if RENDER_DEPLOYMENT:
+            # On Render: Load minimal credit data with strict limits
+            businesses_response = query_table('customer_credits', 
+                                         fields='id,business_id,current_balance', 
+                                         filters=[('customer_id', 'eq', customer_id)],
+                                         limit=RENDER_DASHBOARD_LIMIT)
+            
+            credit_records = businesses_response.data if businesses_response and businesses_response.data else []
+            
+            # Create efficient business ID lookup
+            business_ids = [credit.get('business_id') for credit in credit_records if credit.get('business_id')]
+            
+            # If we have business IDs, get their details in a single optimized query if possible
+            business_details = {}
+            for business_id in business_ids:
+                if business_id:
+                    business_response = query_table('businesses', 
+                                               fields='id,name,description', 
+                                               filters=[('id', 'eq', business_id)])
+                    if business_response and business_response.data:
+                        business_details[business_id] = business_response.data[0]
+            
+            # Combine credit and business data with minimal processing
+            for credit in credit_records:
+                business_id = credit.get('business_id')
+                if business_id in business_details:
+                    # Merge minimal business data with credit data
+                    business_with_credit = {
+                        'id': business_id,
+                        'name': business_details[business_id].get('name', 'Unknown Business'),
+                        'description': business_details[business_id].get('description', ''),
+                        'current_balance': credit.get('current_balance', 0)
+                    }
                     businesses.append(business_with_credit)
                 else:
-                    # If we can't get business details, still show the credit record with minimal info
+                    # Add minimal placeholder if business details not found
                     businesses.append({
                         'id': business_id,
-                        'name': 'Unknown Business',
+                        'name': 'Business',
                         'current_balance': credit.get('current_balance', 0)
                     })
+        else:
+            # In development: Load more complete data
+            businesses_response = query_table('customer_credits', filters=[('customer_id', 'eq', customer_id)])
+            credit_records = businesses_response.data if businesses_response and businesses_response.data else []
+            
+            # For each credit record, get the business details
+            for credit in credit_records:
+                business_id = credit.get('business_id')
+                if business_id:
+                    business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
+                    if business_response and business_response.data:
+                        business = business_response.data[0]
+                        # Merge business data with credit data
+                        business_with_credit = {**business, 'current_balance': credit.get('current_balance', 0)}
+                        businesses.append(business_with_credit)
+                    else:
+                        # If we can't get business details, still show the credit record with minimal info
+                        businesses.append({
+                            'id': business_id,
+                            'name': 'Unknown Business',
+                            'current_balance': credit.get('current_balance', 0)
+                        })
+                        
     except Exception as e:
         print(f"ERROR retrieving business credits: {str(e)}")
         # Continue with empty list
