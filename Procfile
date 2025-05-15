@@ -1,1 +1,1 @@
-web: ./run.sh 
+web: gunicorn wsgi:app 

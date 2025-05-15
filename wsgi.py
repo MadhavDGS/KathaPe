@@ -1,4 +1,7 @@
-# Simple wsgi file to import the app instance from the main app.py file
+"""
+WSGI entry point for the Flask application
+This avoids the naming conflict between the module and the Flask instance
+"""
 import os
 import sys
 
@@ -12,5 +15,6 @@ application = app_module.app
 # For gunicorn
 app = application
 
+# This allows direct execution of this file
 if __name__ == "__main__":
-    app.run() 
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000))) 
