@@ -349,8 +349,9 @@
         </div>
     </header>
     
-    <div class="theme-toggle" id="themeToggle" aria-label="Toggle Dark Mode">
+    <div class="theme-toggle" onclick="toggleTheme()">
         <i class="fas fa-moon"></i>
+        <i class="fas fa-sun" style="display: none;"></i>
     </div>
     
     <div class="container">
@@ -375,33 +376,48 @@
     
     <script>
         // Theme toggle functionality
-        const themeToggle = document.getElementById('themeToggle');
-        const themeIcon = themeToggle.querySelector('i');
-        const htmlElement = document.documentElement;
-        
-        // Check for saved theme preference or use default
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        htmlElement.setAttribute('data-theme', savedTheme);
-        updateThemeIcon(savedTheme);
-        
-        // Toggle theme when button is clicked
-        themeToggle.addEventListener('click', () => {
-            const currentTheme = htmlElement.getAttribute('data-theme');
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
             const newTheme = currentTheme === 'light' ? 'dark' : 'light';
             
-            htmlElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            updateThemeIcon(newTheme);
-        });
-        
-        // Update icon based on current theme
-        function updateThemeIcon(theme) {
-            if (theme === 'dark') {
-                themeIcon.className = 'fas fa-sun';
+            html.setAttribute('data-theme', newTheme);
+            
+            // Toggle icons
+            const moonIcon = document.querySelector('.theme-toggle .fa-moon');
+            const sunIcon = document.querySelector('.theme-toggle .fa-sun');
+            
+            if (newTheme === 'dark') {
+                moonIcon.style.display = 'none';
+                sunIcon.style.display = 'block';
+                document.body.classList.add('dark-mode');
             } else {
-                themeIcon.className = 'fas fa-moon';
+                moonIcon.style.display = 'block';
+                sunIcon.style.display = 'none';
+                document.body.classList.remove('dark-mode');
             }
+            
+            // Save preference to local storage
+            localStorage.setItem('theme', newTheme);
         }
+        
+        // Apply saved theme on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                
+                // Set correct icon
+                const moonIcon = document.querySelector('.theme-toggle .fa-moon');
+                const sunIcon = document.querySelector('.theme-toggle .fa-sun');
+                
+                if (savedTheme === 'dark') {
+                    moonIcon.style.display = 'none';
+                    sunIcon.style.display = 'block';
+                    document.body.classList.add('dark-mode');
+                }
+            }
+        });
         
         // Mobile navigation functionality
         const navToggle = document.getElementById('navToggle');
