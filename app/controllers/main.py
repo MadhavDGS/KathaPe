@@ -138,7 +138,7 @@ def dashboard():
 def customer_dashboard():
     user = get_current_user()
     
-    # Special handling for demo customer account
+    # Special handling for demo customer account - ONLY for the specific demo ID
     if user and user['id'] == '22222222-2222-2222-2222-222222222222':
         # For demo account, create structured data for the template
         demo_data = [
@@ -161,6 +161,8 @@ def customer_dashboard():
             .eq('user_id', user['id']) \
             .execute()
         
+        print(f"Customer query result: {customer_result.data}")
+        
         # If customer found, get their credits across businesses
         if customer_result.data and len(customer_result.data) > 0:
             customer = customer_result.data[0]
@@ -172,6 +174,8 @@ def customer_dashboard():
                 .eq('customer_id', customer['id']) \
                 .execute()
             
+            print(f"Credits query result: {credits_result.data}")
+            
             total_credit = 0
             
             if credits_result.data:
@@ -179,7 +183,7 @@ def customer_dashboard():
                     business_name = credit['businesses']['name'] if credit['businesses'] else 'Unknown Business'
                     credit_records.append({
                         'business_name': business_name,
-                        'credit_amount': "{:.2f}".format(credit['current_balance']),
+                        'credit_amount': "{:.2f}".format(float(credit['current_balance'])),
                         'last_updated': credit['updated_at']
                     })
                     total_credit += float(credit['current_balance'])
@@ -192,7 +196,7 @@ def customer_dashboard():
         print(f"Error fetching customer data: {str(e)}")
         flash("Unable to fetch customer data. Please try again later.", "danger")
     
-    # Default empty state
+    # Default empty state - no dummy data
     return render_template('main/customer_dashboard.html', 
                           user=user, 
                           customers=[],
@@ -593,8 +597,8 @@ def add_business_by_code():
         flash('Business code is required.', 'danger')
         return redirect(url_for('main.customer_add_business'))
     
-    # Check if business with this PIN exists
-    business_result = current_app.supabase.table('businesses') \
+    # Check if business with this PIN exists - use admin_supabase
+    business_result = current_app.admin_supabase.table('businesses') \
         .select('*') \
         .eq('access_pin', access_pin) \
         .execute()
@@ -605,14 +609,16 @@ def add_business_by_code():
     
     business = business_result.data[0]
     
-    # Get customer info for this user
-    customer_result = current_app.supabase.table('customers') \
+    # Get customer info for this user - use admin_supabase
+    customer_result = current_app.admin_supabase.table('customers') \
         .select('*') \
         .eq('user_id', user['id']) \
         .execute()
     
+    print(f"Customer query for add business: {customer_result.data}")
+    
     # If no customer record exists for this user, create one
-    if not customer_result.data:
+    if not customer_result.data or len(customer_result.data) == 0:
         # Create a new customer record for this user
         customer_data = {
             'name': user['name'],
@@ -623,11 +629,13 @@ def add_business_by_code():
         if 'email' in user and user['email']:
             customer_data['email'] = user['email']
         
-        customer_insert = current_app.supabase.table('customers') \
+        customer_insert = current_app.admin_supabase.table('customers') \
             .insert(customer_data) \
             .execute()
         
-        if not customer_insert.data:
+        print(f"Customer insert result: {customer_insert.data}")
+        
+        if not customer_insert.data or len(customer_insert.data) == 0:
             flash('Failed to create customer record. Please try again.', 'danger')
             return redirect(url_for('main.customer_add_business'))
         
@@ -635,28 +643,32 @@ def add_business_by_code():
     else:
         customer = customer_result.data[0]
     
-    # Check if this customer already has a relationship with this business
-    credit_result = current_app.supabase.table('customer_credits') \
+    # Check if this customer already has a relationship with this business - use admin_supabase
+    credit_result = current_app.admin_supabase.table('customer_credits') \
         .select('*') \
         .eq('customer_id', customer['id']) \
         .eq('business_id', business['id']) \
         .execute()
     
+    print(f"Credit check result: {credit_result.data}")
+    
     # If relationship already exists, redirect to customer dashboard
-    if credit_result.data:
+    if credit_result.data and len(credit_result.data) > 0:
         flash('You already have access to this business.', 'info')
         return redirect(url_for('main.customer_dashboard'))
     
-    # Create customer credit record with zero balance
+    # Create customer credit record with zero balance - use admin_supabase
     credit_data = {
         'customer_id': customer['id'],
         'business_id': business['id'],
         'current_balance': 0
     }
     
-    credit_insert = current_app.supabase.table('customer_credits') \
+    credit_insert = current_app.admin_supabase.table('customer_credits') \
         .insert(credit_data) \
         .execute()
+    
+    print(f"Credit insert result: {credit_insert.data}")
     
     flash(f'Successfully added {business["name"]} to your account.', 'success')
     return redirect(url_for('main.customer_dashboard')) 
