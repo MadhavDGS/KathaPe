@@ -96,38 +96,31 @@ AFTER INSERT ON transactions
 FOR EACH ROW
 EXECUTE FUNCTION update_balance_on_transaction();
 
--- Create function to get customer credits with business details
-CREATE OR REPLACE FUNCTION get_customer_credits_with_business_details(p_customer_id UUID)
+-- Create a simple function to get customer credits with business names
+CREATE OR REPLACE FUNCTION get_customer_credits_with_business_names(p_customer_id UUID)
 RETURNS TABLE (
-    id UUID,
+    credit_id UUID,
     customer_id UUID,
     business_id UUID,
     current_balance NUMERIC(10, 2),
-    created_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE,
-    business_name TEXT,
-    business_description TEXT
+    business_name TEXT
 )
-LANGUAGE plpgsql
+LANGUAGE sql
 SECURITY DEFINER
 AS $$
-BEGIN
-  RETURN QUERY 
-  SELECT 
-    cc.id,
-    cc.customer_id,
-    cc.business_id,
-    cc.current_balance,
-    cc.created_at,
-    cc.updated_at,
-    b.name as business_name,
-    b.description as business_description
-  FROM 
-    customer_credits cc
-    JOIN businesses b ON cc.business_id = b.id
-  WHERE 
-    cc.customer_id = p_customer_id;
-END;
+    SELECT 
+        cc.id AS credit_id,
+        cc.customer_id,
+        cc.business_id,
+        cc.current_balance,
+        cc.updated_at,
+        b.name AS business_name
+    FROM 
+        customer_credits cc
+        JOIN businesses b ON cc.business_id = b.id
+    WHERE 
+        cc.customer_id = p_customer_id;
 $$;
 
 -- Create execute_sql function for parameterized queries
@@ -137,18 +130,24 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  param_values text[];
-  sql_query text;
+  param_value text;
+  modified_query text;
   i integer;
   result json;
 BEGIN
-  -- Extract param values into an array
-  FOR i IN 0..jsonb_array_length(params) - 1 LOOP
-    param_values[i+1] := params->i;
-  END LOOP;
-
-  -- Use the query with parameters
-  EXECUTE query INTO result USING VARIADIC param_values;
+  -- Start with the original query
+  modified_query := query;
+  
+  -- Replace the $1, $2, etc. with the parameter values
+  IF jsonb_array_length(params) > 0 THEN
+    FOR i IN 0..jsonb_array_length(params) - 1 LOOP
+      param_value := params->i;
+      modified_query := replace(modified_query, '$' || (i+1)::text, quote_literal(param_value));
+    END LOOP;
+  END IF;
+  
+  -- Execute the modified query
+  EXECUTE modified_query INTO result;
   
   RETURN QUERY SELECT result;
 END;
