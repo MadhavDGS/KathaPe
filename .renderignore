@@ -1,0 +1,5 @@
+# Exclude app directory to avoid naming conflicts with app.py
+/app/
+/app_dir/
+/backup/
+/unused/ 
