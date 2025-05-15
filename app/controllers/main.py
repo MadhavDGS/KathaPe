@@ -138,22 +138,7 @@ def dashboard():
 def customer_dashboard():
     user = get_current_user()
     
-    # Special handling for demo customer account - ONLY for the specific demo ID
-    if user and user['id'] == '22222222-2222-2222-2222-222222222222':
-        # For demo account, create structured data for the template
-        demo_data = [
-            {
-                'business_name': 'Demo Shop',
-                'credit_amount': '500.00',
-                'last_updated': datetime.now().strftime("%Y-%m-%d %H:%M")
-            }
-        ]
-        return render_template('main/customer_dashboard.html', 
-                              user=user, 
-                              customers=demo_data,
-                              total_credits="500.00")
-    
-    # For regular accounts, use the admin_supabase to bypass RLS issues
+    # For all customer accounts, use admin_supabase to bypass RLS issues
     try:
         # Get customer ID for the current user using admin_supabase
         customer_result = current_app.admin_supabase.table('customers') \

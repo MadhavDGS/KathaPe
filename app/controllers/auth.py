@@ -25,7 +25,7 @@ def login():
             phone = request.form['phone']
             password = request.form['password']
             
-            # DEMO ACCOUNT BYPASS - FOR TESTING ONLY
+            # DEMO ACCOUNT BYPASS - BUSINESS ACCOUNT ONLY
             # Check for demo business account
             if phone == '9876543210' and password == 'demo123' and user_type == 'business':
                 # Set session directly for demo business account
@@ -33,14 +33,6 @@ def login():
                 session['user_type'] = 'business'
                 flash('Demo business login successful!', 'success')
                 return redirect(url_for('main.dashboard'))
-                
-            # Check for demo customer account
-            if phone == '9876543211' and password == 'demo123' and user_type == 'customer':
-                # Set session directly for demo customer account
-                session['user_id'] = '22222222-2222-2222-2222-222222222222'  # Use the ID from the SQL sample data
-                session['user_type'] = 'customer'
-                flash('Demo customer login successful!', 'success')
-                return redirect(url_for('main.customer_dashboard'))
             
             try:
                 # Direct authentication using admin_supabase to bypass RLS
@@ -75,7 +67,8 @@ def login():
                                         'phone_number': user['phone_number'],
                                         'email': user['email'] if 'email' in user else None
                                     }
-                                    current_app.admin_supabase.table('customers').insert(customer_data).execute()
+                                    customer_result = current_app.admin_supabase.table('customers').insert(customer_data).execute()
+                                    print(f"Created new customer record: {customer_result.data}")
                             except Exception as customer_sync_error:
                                 print(f"Customer data sync error: {str(customer_sync_error)}")
                                 # Continue login process even if sync fails
@@ -116,14 +109,11 @@ def register():
             flash('Passwords do not match.', 'danger')
             return redirect(url_for('auth.register'))
         
-        # DEMO ACCOUNT CREATION - FOR TESTING ONLY
-        if name.startswith('Demo'):
-            # Set demo login credentials for the user instead of regular registration
-            flash('Demo account created! You can log in with our demo credentials.', 'success')
-            if user_type == 'business':
-                flash('Login with phone: 9876543210, password: demo123', 'info')
-            else:
-                flash('Login with phone: 9876543211, password: demo123', 'info')
+        # DEMO ACCOUNT CREATION - FOR BUSINESS ONLY
+        if name.startswith('Demo') and user_type == 'business':
+            # Set demo login credentials for the business user
+            flash('Demo business account created! You can log in with demo credentials.', 'success')
+            flash('Login with phone: 9876543210, password: demo123', 'info')
             return redirect(url_for('auth.login'))
         
         # Try direct database operations with extensive error handling
@@ -215,6 +205,7 @@ def register():
                     }
                     
                     customer_result = current_app.admin_supabase.table('customers').insert(customer_data).execute()
+                    print(f"Customer registration details: {customer_result.data}")
                     
                     if customer_result.data and len(customer_result.data) > 0:
                         customer_id = customer_result.data[0]['id']
