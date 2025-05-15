@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
+import sys
 
 # Check if running on Render
 RENDER_DEPLOYMENT = os.environ.get('RENDER', False)
@@ -2153,6 +2154,42 @@ def ensure_customer_credit_exists(business_id, customer_id, initial_balance=0):
     else:
         # Return the data even if insert failed (for mock data system)
         return credit_data
+
+# Add diagnostic endpoint for testing deployment
+@app.route('/api/status')
+def api_status():
+    """Status endpoint for checking API health"""
+    try:
+        # Check if we can connect to database
+        result = {"status": "ok", "database": False, "error": None}
+        
+        try:
+            # Test Supabase connection
+            client = get_supabase_client()
+            if client:
+                # Try a simple query
+                response = client.table('users').select('id').limit(1).execute()
+                if response and response.data:
+                    result["database"] = True
+                    result["user_count"] = len(response.data)
+        except Exception as db_error:
+            result["error"] = str(db_error)
+            
+        # Return environment info without sensitive values
+        result["environment"] = {
+            "render": os.environ.get('RENDER', 'false'),
+            "flask_env": os.environ.get('FLASK_ENV', 'production'),
+            "python_path": sys.path,
+            "python_version": sys.version,
+        }
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        })
 
 # Run the application
 if __name__ == '__main__':
