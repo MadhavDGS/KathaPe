@@ -1,194 +1,108 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found - KathaPe</title>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        :root {
-            --primary-color: #5c67de;
-            --primary-gradient: linear-gradient(135deg, #5c67de, #41a0e6);
-            --credit-color: #e74c3c;
-            --payment-color: #2ecc71;
-            --text-color: #333;
-            --text-muted: #666;
-            --bg-color: #f5f8fa;
-            --card-bg: #ffffff;
-            --border-radius: 14px;
-            --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-        }
-        
-        [data-theme="dark"] {
-            --text-color: #f0f0f0;
-            --text-muted: #a0a0a0;
-            --bg-color: #1a1f2e;
-            --card-bg: #252a3c;
-            --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-        }
-        
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Nunito', sans-serif;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .error-container {
-            text-align: center;
-            padding: 50px 30px;
-            max-width: 600px;
-            background-color: var(--card-bg);
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-        }
-        
-        .error-code {
-            font-size: 100px;
-            font-weight: 800;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
-            line-height: 1;
-        }
-        
-        .error-message {
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 20px;
-            color: var(--text-color);
-        }
-        
-        p {
-            color: var(--text-muted);
-            font-size: 16px;
-            margin-bottom: 30px;
-        }
-        
-        .back-link {
-            display: inline-block;
-            padding: 14px 28px;
-            background: var(--primary-gradient);
-            color: white;
-            text-decoration: none;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 16px;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(92, 103, 222, 0.3);
-        }
-        
-        .back-link:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(92, 103, 222, 0.4);
-        }
-        
-        .animated-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: 100%;
-            background: linear-gradient(45deg, #5c67de15, #41e6a615, #5c67de15);
-            background-size: 400% 400%;
-            animation: gradient 15s ease infinite;
-            z-index: -1;
-        }
-        
-        [data-theme="dark"] .animated-bg {
-            background: linear-gradient(45deg, #5c67de25, #9141e615, #5c67de25);
-        }
-        
-        @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-        
-        /* Theme toggle */
-        .theme-toggle {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 56px;
-            height: 56px;
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            z-index: 100;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        [data-theme="dark"] .theme-toggle {
-            background-color: #ffd700;
-            color: #333;
-            border: 2px solid rgba(0, 0, 0, 0.2);
-        }
-        
-        .theme-toggle i {
-            font-size: 1.5rem;
-            text-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
-        }
-    </style>
-</head>
-<body>
-    <div class="animated-bg"></div>
-    <div class="error-container">
-        <div class="error-code">404</div>
-        <div class="error-message">Page Not Found</div>
-        <p>The page you are looking for doesn't exist or has been moved.</p>
-        <a href="{{ url_for('index') }}" class="back-link">
+{% extends "base.html" %}
+
+{% block title %}Page Not Found{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-icon">
+        <i class="fas fa-search"></i>
+    </div>
+    <h1>Page Not Found</h1>
+    <p class="error-message">The page you are looking for doesn't exist or has been moved.</p>
+    
+    <div class="error-details">
+        <p>You might have followed a broken link or entered a URL that doesn't exist on this site.</p>
+        <p>Please check the URL and try again, or use the navigation options below.</p>
+    </div>
+    
+    <div class="error-actions">
+        <a href="{{ url_for('index') }}" class="btn btn-primary">
             <i class="fas fa-home"></i> Go to Homepage
         </a>
+        <a href="javascript:history.back()" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Go Back
+        </a>
     </div>
-    
-    <div class="theme-toggle" id="themeToggle" aria-label="Toggle Dark Mode">
-        <i class="fas fa-moon"></i>
-    </div>
-    
-    <script>
-        // Theme toggle functionality
-        const themeToggle = document.getElementById('themeToggle');
-        const themeIcon = themeToggle.querySelector('i');
-        const htmlElement = document.documentElement;
-        
-        // Check for saved theme preference or use default
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        htmlElement.setAttribute('data-theme', savedTheme);
-        updateThemeIcon(savedTheme);
-        
-        // Toggle theme when button is clicked
-        themeToggle.addEventListener('click', () => {
-            const currentTheme = htmlElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-            
-            htmlElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            updateThemeIcon(newTheme);
-        });
-        
-        // Update icon based on current theme
-        function updateThemeIcon(theme) {
-            if (theme === 'dark') {
-                themeIcon.className = 'fas fa-sun';
-            } else {
-                themeIcon.className = 'fas fa-moon';
-            }
-        }
-    </script>
-</body>
-</html> 
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.error-container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 30px;
+    text-align: center;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+}
+
+.error-icon {
+    font-size: 4rem;
+    color: var(--primary-color);
+    margin-bottom: 20px;
+}
+
+.error-container h1 {
+    color: var(--text-color);
+    margin-bottom: 20px;
+    font-size: 2rem;
+}
+
+.error-message {
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+    color: var(--text-muted);
+}
+
+.error-details {
+    background-color: rgba(92, 103, 222, 0.1);
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    text-align: left;
+}
+
+.error-details p {
+    margin: 10px 0;
+}
+
+.error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 30px;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #4a54c4;
+    transform: translateY(-3px);
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+    transform: translateY(-3px);
+}
+{% endblock %} 

@@ -640,138 +640,180 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        print(f"DEBUG: Starting login process")
-        phone = request.form.get('phone')
-        password = request.form.get('password')
-        user_type = request.form.get('user_type', 'customer')
-        
-        print(f"DEBUG: Attempting login with phone={phone}, user_type={user_type}")
-        
-        if not phone or not password:
-            flash('Please enter both phone number and password', 'error')
-            return render_template('login.html')
-        
-        # Set sensible default values for the session in case DB operations fail
-        user_id = str(uuid.uuid4())
-        user_name = f"User {phone[-4:]}"
-        
         try:
-            # Try Supabase authentication
-            def find_user():
-                # Get client and query - only select needed fields to improve performance
-                client = get_supabase_client()
-                if not client:
-                    return None
-                
-                # Optimized single query with only required fields
-                return client.table('users').select('id,name,password,user_type').eq('phone_number', phone).execute()
+            print(f"DEBUG: Starting login process")
+            phone = request.form.get('phone')
+            password = request.form.get('password')
+            user_type = request.form.get('user_type', 'customer')
+            
+            print(f"DEBUG: Attempting login with phone={phone}, user_type={user_type}")
+            
+            if not phone or not password:
+                flash('Please enter both phone number and password', 'error')
+                return render_template('login.html')
+            
+            # Set sensible default values for the session in case DB operations fail
+            user_id = str(uuid.uuid4())
+            user_name = f"User {phone[-4:]}"
+            
+            # Try Supabase authentication with minimal field selection
+            client = get_supabase_client()
+            if not client:
+                # Handle database connection error
+                flash('Database connection error. Please try again later.', 'error')
+                return render_template('login.html')
             
             # Extra logging for Render
             if RENDER_DEPLOYMENT:
                 print(f"RENDER: Starting user lookup for phone={phone}")
                 start_time = time.time()
             
-            user_response = timeout_query(find_user)
-            
-            if RENDER_DEPLOYMENT:
-                elapsed_time = time.time() - start_time
-                print(f"RENDER: User lookup completed in {elapsed_time:.2f} seconds")
-            
-            if not user_response or not user_response.data:
-                flash('Invalid credentials: User not found', 'error')
-                return render_template('login.html')
-            
-            print(f"DEBUG: Found user with matching phone number: {user_response.data[0].get('id')}")
-            user = user_response.data[0]
-            user_id = user['id']
-            
-            # Verify password - simplified for this implementation
-            if user.get('password') != password:
-                flash('Invalid password', 'error')
-                return render_template('login.html')
-            
-            # Set up session data
-            session['user_id'] = user_id
-            session['user_name'] = user.get('name', user_name)
-            session['user_type'] = user_type
-            session['phone_number'] = phone
-            
-            flash('Login successful!', 'success')
-            
-            # Check if user type matches the expected user type
-            if user.get('user_type') and user.get('user_type') != user_type:
-                print(f"WARNING: User type mismatch. Expected {user_type}, got {user.get('user_type')}")
-                flash(f"Switching to your {user.get('user_type')} account", 'info')
-                user_type = user.get('user_type')
+            # Directly execute query without timeout function for login
+            try:
+                # Use minimal fields for better performance
+                user_response = client.table('users').select('id,name,password,user_type').eq('phone_number', phone).execute()
+                
+                if RENDER_DEPLOYMENT:
+                    elapsed_time = time.time() - start_time
+                    print(f"RENDER: User lookup completed in {elapsed_time:.2f} seconds")
+                
+                if not user_response or not user_response.data:
+                    flash('Invalid credentials: User not found', 'error')
+                    return render_template('login.html')
+                
+                user = user_response.data[0]
+                user_id = user['id']
+                print(f"DEBUG: Found user with ID {user_id}")
+                
+                # Verify password
+                if user.get('password') != password:
+                    flash('Invalid password', 'error')
+                    return render_template('login.html')
+                
+                # Set session data
+                session['user_id'] = user_id
+                session['user_name'] = user.get('name', user_name)
                 session['user_type'] = user_type
-            
-            # Fetch profile data based on user type - optimize queries
-            if user_type == 'business':
-                # Try to get business record with minimal fields
+                session['phone_number'] = phone
+                
                 if RENDER_DEPLOYMENT:
-                    print(f"RENDER: Starting business lookup for user_id={user_id}")
-                    start_time = time.time()
+                    # On Render: Minimal setup for faster page load
+                    flash('Login successful!', 'success')
                     
-                # Simplified business query
-                def get_business():
-                    client = get_supabase_client()
-                    if not client:
-                        return None
-                    return client.table('businesses').select('id,name,access_pin').eq('user_id', user_id).execute()
-                
-                business_response = timeout_query(get_business)
-                
-                if RENDER_DEPLOYMENT:
-                    elapsed_time = time.time() - start_time
-                    print(f"RENDER: Business lookup completed in {elapsed_time:.2f} seconds")
-                
-                if business_response and business_response.data:
-                    business = business_response.data[0]
-                    session['business_id'] = business['id']
-                    session['business_name'] = business.get('name', f"{user.get('name')}'s Business")
-                    session['access_pin'] = business.get('access_pin', f"{int(datetime.now().timestamp()) % 10000:04d}")
+                    if user_type == 'business':
+                        # Minimal session data, will fetch details in dashboard
+                        business_id = str(uuid.uuid4())
+                        session['business_id'] = business_id
+                        session['business_name'] = f"{user.get('name')}'s Business"
+                        session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                        return redirect(url_for('business_dashboard'))
+                    else:
+                        # Minimal session data, will fetch details in dashboard
+                        customer_id = str(uuid.uuid4())
+                        session['customer_id'] = customer_id
+                        return redirect(url_for('customer_dashboard'))
                 else:
-                    # Create default business data
-                    business_id = str(uuid.uuid4())
-                    session['business_id'] = business_id
-                    session['business_name'] = f"{user.get('name')}'s Business"
-                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                
-                return redirect(url_for('business_dashboard'))
-            else:
-                # Try to get customer record with minimal fields
-                if RENDER_DEPLOYMENT:
-                    print(f"RENDER: Starting customer lookup for user_id={user_id}")
-                    start_time = time.time()
-                
-                # Simplified customer query
-                def get_customer():
-                    client = get_supabase_client()
-                    if not client:
-                        return None
-                    return client.table('customers').select('id').eq('user_id', user_id).execute()
-                
-                customer_response = timeout_query(get_customer)
-                
-                if RENDER_DEPLOYMENT:
-                    elapsed_time = time.time() - start_time
-                    print(f"RENDER: Customer lookup completed in {elapsed_time:.2f} seconds")
-                
-                if customer_response and customer_response.data:
-                    customer = customer_response.data[0]
-                    session['customer_id'] = customer['id']
-                else:
-                    # Create default customer data
-                    customer_id = str(uuid.uuid4())
-                    session['customer_id'] = customer_id
-                
-                return redirect(url_for('customer_dashboard'))
+                    # In development: Fetch full profile data
+                    if user_type == 'business':
+                        # Try to get business record with minimal fields
+                        try:
+                            business_response = client.table('businesses').select('id,name,access_pin').eq('user_id', user_id).execute()
+                            
+                            if business_response and business_response.data:
+                                business = business_response.data[0]
+                                session['business_id'] = business['id']
+                                session['business_name'] = business.get('name', f"{user.get('name')}'s Business")
+                                session['access_pin'] = business.get('access_pin', f"{int(datetime.now().timestamp()) % 10000:04d}")
+                            else:
+                                # Create default business data
+                                business_id = str(uuid.uuid4())
+                                session['business_id'] = business_id
+                                session['business_name'] = f"{user.get('name')}'s Business"
+                                session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                        except Exception as e:
+                            print(f"Error fetching business data: {str(e)}")
+                            # Create default business data on error
+                            business_id = str(uuid.uuid4())
+                            session['business_id'] = business_id
+                            session['business_name'] = f"{user.get('name')}'s Business"
+                            session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                            
+                        flash('Login successful!', 'success')
+                        return redirect(url_for('business_dashboard'))
+                    else:
+                        # Try to get customer record with minimal fields
+                        try:
+                            customer_response = client.table('customers').select('id').eq('user_id', user_id).execute()
+                            
+                            if customer_response and customer_response.data:
+                                customer = customer_response.data[0]
+                                session['customer_id'] = customer['id']
+                            else:
+                                # Create default customer data
+                                customer_id = str(uuid.uuid4())
+                                session['customer_id'] = customer_id
+                        except Exception as e:
+                            print(f"Error fetching customer data: {str(e)}")
+                            # Create default customer data on error
+                            customer_id = str(uuid.uuid4())
+                            session['customer_id'] = customer_id
+                            
+                        flash('Login successful!', 'success')
+                        return redirect(url_for('customer_dashboard'))
+                    
+            except Exception as e:
+                print(f"Database query error: {str(e)}")
+                traceback.print_exc()  # Print full traceback for debugging
+                flash('Login failed. Please try again later.', 'error')
+                return render_template('login.html')
                 
         except Exception as e:
-            print(f"DEBUG: Login error: {str(e)}")
+            print(f"CRITICAL ERROR in login: {str(e)}")
             traceback.print_exc()
-            flash('Login failed. Please try again.', 'error')
-            return render_template('login.html')
+            
+            # Failsafe error page
+            error_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Login Error - KathaPe</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
+                    h1 {{ color: #e74c3c; }}
+                    .error-box {{ 
+                        background-color: #f8d7da; 
+                        border: 1px solid #f5c6cb; 
+                        border-radius: 5px; 
+                        padding: 20px; 
+                        margin: 20px auto; 
+                        max-width: 800px;
+                        text-align: left;
+                        overflow: auto;
+                    }}
+                    .btn {{ 
+                        display: inline-block; 
+                        background-color: #5c67de; 
+                        color: white; 
+                        padding: 10px 20px; 
+                        text-decoration: none; 
+                        border-radius: 5px; 
+                        margin-top: 20px; 
+                    }}
+                </style>
+            </head>
+            <body>
+                <h1>Login Error</h1>
+                <p>We encountered a problem during login.</p>
+                <div class="error-box">
+                    <strong>Error details:</strong><br>
+                    {str(e)}
+                </div>
+                <a href="/login" class="btn">Try Again</a>
+            </body>
+            </html>
+            """
+            return error_html
     
     return render_template('login.html')
 
@@ -785,316 +827,373 @@ def logout():
 @login_required
 @business_required
 def business_dashboard():
-    user_id = safe_uuid(session.get('user_id'))
-    
     try:
-        # Get business details by user_id
-        business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
+        user_id = safe_uuid(session.get('user_id'))
         
-        if business_response and business_response.data:
-            business = business_response.data[0]
-            session['business_id'] = business['id']
-            session['business_name'] = business['name']
-            session['access_pin'] = business['access_pin']
-        else:
-            # Create a new business record
-            try:
-                supabase_url = os.getenv('SUPABASE_URL')
-                supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
-                
-                business_id = str(uuid.uuid4())
-                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                
-                business_data = {
-                    'id': business_id,
-                    'user_id': user_id,
-                    'name': f"{session['user_name']}'s Business",
-                    'description': 'Auto-created business account',
-                    'access_pin': access_pin,
-                    'created_at': datetime.now().isoformat()
-                }
-                
-                # Insert with service role directly
-                try:
-                    # Try using the query_table helper function
-                    query_table('businesses', query_type='insert', data=business_data)
-                except Exception as e:
-                    print(f"ERROR inserting business with query_table: {str(e)}")
-                    # Fallback to direct REST API
-                    try:
-                        headers = {
-                            'apikey': supabase_service_key,
-                            'Authorization': f"Bearer {supabase_service_key}",
-                            'Content-Type': 'application/json'
-                        }
-                        
-                        requests.post(
-                            f"{supabase_url}/rest/v1/businesses",
-                            headers=headers,
-                            json=business_data
-                        )
-                    except Exception as e2:
-                        print(f"ERROR inserting business with direct API: {str(e2)}")
-                
-                session['business_id'] = business_id
-                session['business_name'] = business_data['name']
-                session['access_pin'] = access_pin
-                
-                flash('Business profile has been created', 'success')
-            except Exception as e:
-                print(f"ERROR creating business: {str(e)}")
-                # Create a temporary session business to allow user to continue
-                temp_id = str(uuid.uuid4())
-                session['business_id'] = temp_id
-                session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-                session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-    except Exception as e:
-        flash(f'Error retrieving business: {str(e)}', 'error')
-        # Create a temporary session business to allow user to continue
-        temp_id = str(uuid.uuid4())
-        session['business_id'] = temp_id
-        session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-        session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-    
-    business_id = safe_uuid(session.get('business_id'))
-    
-    try:
-        # Get business details
-        business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
-        
-        if business_response and business_response.data:
-            business = business_response.data[0]
+        try:
+            # Get business details by user_id
+            business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
             
-            # If access_pin is missing, generate one
-            if not business.get('access_pin'):
-                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+            if business_response and business_response.data:
+                business = business_response.data[0]
+                session['business_id'] = business['id']
+                session['business_name'] = business['name']
+                session['access_pin'] = business['access_pin']
+            else:
+                # Create a new business record
                 try:
-                    query_table('businesses', query_type='update', 
-                            data={'access_pin': access_pin},
-                            filters=[('id', 'eq', business_id)])
-                    business['access_pin'] = access_pin
+                    supabase_url = os.getenv('SUPABASE_URL')
+                    supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
+                    
+                    business_id = str(uuid.uuid4())
+                    access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                    
+                    business_data = {
+                        'id': business_id,
+                        'user_id': user_id,
+                        'name': f"{session['user_name']}'s Business",
+                        'description': 'Auto-created business account',
+                        'access_pin': access_pin,
+                        'created_at': datetime.now().isoformat()
+                    }
+                    
+                    # Insert with service role directly
+                    try:
+                        # Try using the query_table helper function
+                        query_table('businesses', query_type='insert', data=business_data)
+                    except Exception as e:
+                        print(f"ERROR inserting business with query_table: {str(e)}")
+                        # Fallback to direct REST API
+                        try:
+                            headers = {
+                                'apikey': supabase_service_key,
+                                'Authorization': f"Bearer {supabase_service_key}",
+                                'Content-Type': 'application/json'
+                            }
+                            
+                            requests.post(
+                                f"{supabase_url}/rest/v1/businesses",
+                                headers=headers,
+                                json=business_data
+                            )
+                        except Exception as e2:
+                            print(f"ERROR inserting business with direct API: {str(e2)}")
+                    
+                    session['business_id'] = business_id
+                    session['business_name'] = business_data['name']
+                    session['access_pin'] = access_pin
+                    
+                    flash('Business profile has been created', 'success')
                 except Exception as e:
-                    print(f"ERROR updating access_pin: {str(e)}")
-                    business['access_pin'] = session.get('access_pin', access_pin)
-        else:
-            # Create a mock business object from session data
-            business = {
-                'id': business_id,
-                'name': session.get('business_name', 'Your Business'),
-                'description': 'Business account',
-                'access_pin': session.get('access_pin', '0000')
-            }
+                    print(f"ERROR creating business: {str(e)}")
+                    # Create a temporary session business to allow user to continue
+                    temp_id = str(uuid.uuid4())
+                    session['business_id'] = temp_id
+                    session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
+                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+        except Exception as e:
+            flash(f'Error retrieving business: {str(e)}', 'error')
+            # Create a temporary session business to allow user to continue
+            temp_id = str(uuid.uuid4())
+            session['business_id'] = temp_id
+            session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
+            session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
         
-        # Get summary data with error handling
-        total_customers = 0
-        total_credit = 0
-        total_payments = 0
-        transactions = []
-        customers = []
+        business_id = safe_uuid(session.get('business_id'))
         
-        # Use different loading strategies based on environment
-        if RENDER_DEPLOYMENT:
-            # On Render: Load minimal essential data for dashboard with strict limits
-            try:
-                # Get customer count - simple and fast count query
-                customers_response = query_table('customer_credits', 
-                                             fields='id', 
-                                             filters=[('business_id', 'eq', business_id)])
-                total_customers = len(customers_response.data) if customers_response and customers_response.data else 0
+        try:
+            # Get business details
+            business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
+            
+            if business_response and business_response.data:
+                business = business_response.data[0]
                 
-                # Get just a few customers for display
-                credited_customers_response = query_table('customer_credits', 
-                                                     filters=[('business_id', 'eq', business_id)],
-                                                     limit=RENDER_DASHBOARD_LIMIT)
-                
-                if credited_customers_response and credited_customers_response.data:
-                    # Get simplified customer data for each of these credits (limited)
-                    for credit in credited_customers_response.data:
+                # If access_pin is missing, generate one
+                if not business.get('access_pin'):
+                    access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                    try:
+                        query_table('businesses', query_type='update', 
+                                data={'access_pin': access_pin},
+                                filters=[('id', 'eq', business_id)])
+                        business['access_pin'] = access_pin
+                    except Exception as e:
+                        print(f"ERROR updating access_pin: {str(e)}")
+                        business['access_pin'] = session.get('access_pin', access_pin)
+            else:
+                # Create a mock business object from session data
+                business = {
+                    'id': business_id,
+                    'name': session.get('business_name', 'Your Business'),
+                    'description': 'Business account',
+                    'access_pin': session.get('access_pin', '0000')
+                }
+            
+            # Get summary data with error handling
+            total_customers = 0
+            total_credit = 0
+            total_payments = 0
+            transactions = []
+            customers = []
+            
+            # Use different loading strategies based on environment
+            if RENDER_DEPLOYMENT:
+                # On Render: Load minimal essential data for dashboard with strict limits
+                try:
+                    # Get customer count - simple and fast count query
+                    customers_response = query_table('customer_credits', 
+                                                 fields='id', 
+                                                 filters=[('business_id', 'eq', business_id)])
+                    total_customers = len(customers_response.data) if customers_response and customers_response.data else 0
+                    
+                    # Get just a few customers for display
+                    credited_customers_response = query_table('customer_credits', 
+                                                         filters=[('business_id', 'eq', business_id)],
+                                                         limit=RENDER_DASHBOARD_LIMIT)
+                    
+                    if credited_customers_response and credited_customers_response.data:
+                        # Get simplified customer data for each of these credits (limited)
+                        for credit in credited_customers_response.data:
+                            customer_id = safe_uuid(credit.get('customer_id'))
+                            try:
+                                customer_response = query_table('customers', 
+                                                            fields='id,name,phone_number', 
+                                                            filters=[('id', 'eq', customer_id)])
+                                if customer_response and customer_response.data:
+                                    customer = customer_response.data[0]
+                                    # Merge with minimal data
+                                    customer_with_credit = {
+                                        'id': customer.get('id'),
+                                        'name': customer.get('name', 'Unknown'),
+                                        'phone_number': customer.get('phone_number', 'Unknown'),
+                                        'current_balance': credit.get('current_balance', 0)
+                                    }
+                                    customers.append(customer_with_credit)
+                            except Exception as e:
+                                print(f"ERROR retrieving customer {customer_id}: {str(e)}")
+                    
+                    # Get a few recent transactions
+                    transactions_response = query_table('transactions', 
+                                                  filters=[('business_id', 'eq', business_id)],
+                                                  limit=RENDER_DASHBOARD_LIMIT)
+                    
+                    if transactions_response and transactions_response.data:
+                        transactions = transactions_response.data
+                        
+                        # Get basic customer names for these transactions with a single query
+                        customer_ids = [tx.get('customer_id') for tx in transactions if tx.get('customer_id')]
+                        if customer_ids:
+                            # Get all customers in a single query instead of multiple queries
+                            customers_map = {}
+                            for customer_id in customer_ids:
+                                customer_response = query_table('customers', 
+                                                            fields='id,name', 
+                                                            filters=[('id', 'eq', customer_id)])
+                                if customer_response and customer_response.data:
+                                    customers_map[customer_response.data[0].get('id')] = customer_response.data[0].get('name', 'Unknown')
+                            
+                            # Apply customer names to transactions
+                            for transaction in transactions:
+                                cust_id = transaction.get('customer_id')
+                                transaction['customer_name'] = customers_map.get(cust_id, 'Unknown')
+                    
+                    # Get credit and payment totals with simple queries
+                    try:
+                        credit_sum_response = query_table('transactions', 
+                                                    fields='amount', 
+                                                    filters=[('business_id', 'eq', business_id), 
+                                                            ('transaction_type', 'eq', 'credit')],
+                                                    limit=100)  # Limit but enough to get summary totals
+                        
+                        if credit_sum_response and credit_sum_response.data:
+                            total_credit = sum([float(t.get('amount', 0)) for t in credit_sum_response.data])
+                    except Exception as e:
+                        print(f"ERROR getting credit total: {str(e)}")
+                    
+                    try:
+                        payment_sum_response = query_table('transactions', 
+                                                      fields='amount', 
+                                                      filters=[('business_id', 'eq', business_id), 
+                                                              ('transaction_type', 'eq', 'payment')],
+                                                      limit=100)  # Limit but enough to get summary totals
+                        
+                        if payment_sum_response and payment_sum_response.data:
+                            total_payments = sum([float(t.get('amount', 0)) for t in payment_sum_response.data])
+                    except Exception as e:
+                        print(f"ERROR getting payment total: {str(e)}")
+                        
+                except Exception as e:
+                    print(f"ERROR in Render optimized data loading: {str(e)}")
+                    # Create basic mock data on error
+                    total_customers = 0
+                    total_credit = 0
+                    total_payments = 0
+                    transactions = [{'customer_name': 'Example Customer', 'amount': 0, 'transaction_type': 'credit', 'created_at': datetime.now().isoformat()}]
+                    customers = [{'name': 'Example Customer', 'current_balance': 0, 'id': str(uuid.uuid4())}]
+                    
+            else:
+                # In development: Load complete data with more detailed queries
+                try:
+                    # Get customer credits to display customers on dashboard
+                    customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
+                    customer_credits = customers_response.data if customers_response and customers_response.data else []
+                    
+                    # Total customers
+                    total_customers = len(customer_credits)
+                    
+                    # Get customer details for each customer credit
+                    for credit in customer_credits:
                         customer_id = safe_uuid(credit.get('customer_id'))
                         try:
-                            customer_response = query_table('customers', 
-                                                        fields='id,name,phone_number', 
-                                                        filters=[('id', 'eq', customer_id)])
+                            customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
                             if customer_response and customer_response.data:
                                 customer = customer_response.data[0]
-                                # Merge with minimal data
+                                # Merge customer details with credit information
                                 customer_with_credit = {
-                                    'id': customer.get('id'),
-                                    'name': customer.get('name', 'Unknown'),
-                                    'phone_number': customer.get('phone_number', 'Unknown'),
+                                    **customer,
                                     'current_balance': credit.get('current_balance', 0)
                                 }
                                 customers.append(customer_with_credit)
                         except Exception as e:
                             print(f"ERROR retrieving customer {customer_id}: {str(e)}")
-                
-                # Get a few recent transactions
-                transactions_response = query_table('transactions', 
-                                              filters=[('business_id', 'eq', business_id)],
-                                              limit=RENDER_DASHBOARD_LIMIT)
-                
-                if transactions_response and transactions_response.data:
-                    transactions = transactions_response.data
                     
-                    # Get basic customer names for these transactions with a single query
-                    customer_ids = [tx.get('customer_id') for tx in transactions if tx.get('customer_id')]
-                    if customer_ids:
-                        # Get all customers in a single query instead of multiple queries
-                        customers_map = {}
-                        for customer_id in customer_ids:
-                            customer_response = query_table('customers', 
-                                                        fields='id,name', 
-                                                        filters=[('id', 'eq', customer_id)])
-                            if customer_response and customer_response.data:
-                                customers_map[customer_response.data[0].get('id')] = customer_response.data[0].get('name', 'Unknown')
-                        
-                        # Apply customer names to transactions
-                        for transaction in transactions:
-                            cust_id = transaction.get('customer_id')
-                            transaction['customer_name'] = customers_map.get(cust_id, 'Unknown')
+                except Exception as e:
+                    print(f"ERROR getting customers count: {str(e)}")
                 
-                # Get credit and payment totals with simple queries
                 try:
-                    credit_sum_response = query_table('transactions', 
-                                                fields='amount', 
-                                                filters=[('business_id', 'eq', business_id), 
-                                                        ('transaction_type', 'eq', 'credit')],
-                                                limit=100)  # Limit but enough to get summary totals
-                    
-                    if credit_sum_response and credit_sum_response.data:
-                        total_credit = sum([float(t.get('amount', 0)) for t in credit_sum_response.data])
+                    # Total credit
+                    credit_response = query_table('transactions', fields='amount', 
+                                                filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
+                    total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
                 except Exception as e:
                     print(f"ERROR getting credit total: {str(e)}")
                 
                 try:
-                    payment_sum_response = query_table('transactions', 
-                                                  fields='amount', 
-                                                  filters=[('business_id', 'eq', business_id), 
-                                                          ('transaction_type', 'eq', 'payment')],
-                                                  limit=100)  # Limit but enough to get summary totals
-                    
-                    if payment_sum_response and payment_sum_response.data:
-                        total_payments = sum([float(t.get('amount', 0)) for t in payment_sum_response.data])
+                    # Total payments
+                    payment_response = query_table('transactions', fields='amount',
+                                                filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
+                    total_payments = sum([float(t.get('amount', 0)) for t in payment_response.data]) if payment_response and payment_response.data else 0
                 except Exception as e:
                     print(f"ERROR getting payment total: {str(e)}")
+                
+                try:
+                    # Recent transactions
+                    transactions_response = query_table('transactions', 
+                                                    filters=[('business_id', 'eq', business_id)])
+                    transactions = transactions_response.data if transactions_response and transactions_response.data else []
                     
-            except Exception as e:
-                print(f"ERROR in Render optimized data loading: {str(e)}")
-                
-        else:
-            # In development: Load complete data with more detailed queries
-            try:
-                # Get customer credits to display customers on dashboard
-                customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
-                customer_credits = customers_response.data if customers_response and customers_response.data else []
-                
-                # Total customers
-                total_customers = len(customer_credits)
-                
-                # Get customer details for each customer credit
-                for credit in customer_credits:
-                    customer_id = safe_uuid(credit.get('customer_id'))
-                    try:
-                        customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
-                        if customer_response and customer_response.data:
-                            customer = customer_response.data[0]
-                            # Merge customer details with credit information
-                            customer_with_credit = {
-                                **customer,
-                                'current_balance': credit.get('current_balance', 0)
-                            }
-                            customers.append(customer_with_credit)
-                    except Exception as e:
-                        print(f"ERROR retrieving customer {customer_id}: {str(e)}")
-                
-            except Exception as e:
-                print(f"ERROR getting customers count: {str(e)}")
-            
-            try:
-                # Total credit
-                credit_response = query_table('transactions', fields='amount', 
-                                            filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
-                total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
-            except Exception as e:
-                print(f"ERROR getting credit total: {str(e)}")
-            
-            try:
-                # Total payments
-                payment_response = query_table('transactions', fields='amount',
-                                            filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
-                total_payments = sum([float(t.get('amount', 0)) for t in payment_response.data]) if payment_response and payment_response.data else 0
-            except Exception as e:
-                print(f"ERROR getting payment total: {str(e)}")
-            
-            try:
-                # Recent transactions
-                transactions_response = query_table('transactions', 
-                                                filters=[('business_id', 'eq', business_id)])
-                transactions = transactions_response.data if transactions_response and transactions_response.data else []
-                
-                # Get customer names for transactions
-                for transaction in transactions:
-                    customer_id = safe_uuid(transaction.get('customer_id'))
-                    try:
-                        customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
-                        if customer_response and customer_response.data:
-                            transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
-                        else:
+                    # Get customer names for transactions
+                    for transaction in transactions:
+                        customer_id = safe_uuid(transaction.get('customer_id'))
+                        try:
+                            customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
+                            if customer_response and customer_response.data:
+                                transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
+                            else:
+                                transaction['customer_name'] = 'Unknown'
+                        except Exception as e:
+                            print(f"ERROR getting customer name: {str(e)}")
                             transaction['customer_name'] = 'Unknown'
-                    except Exception as e:
-                        print(f"ERROR getting customer name: {str(e)}")
-                        transaction['customer_name'] = 'Unknown'
-            except Exception as e:
-                print(f"ERROR getting transactions: {str(e)}")
-        
-        # Generate QR code (placeholder on Render) 
-        try:
-            generate_business_qr_code(business_id, business['access_pin'])
-        except Exception as e:
-            print(f"ERROR generating QR code: {str(e)}")
-        
-        # Prepare data for template
-        summary = {
-            'total_customers': total_customers,
-            'total_credit': total_credit,
-            'total_payments': total_payments
-        }
-        
-        return render_template('business/dashboard.html', 
-                            business=business, 
-                            summary=summary, 
-                            transactions=transactions,
-                            customers=customers)
-    
-    except Exception as e:
-        flash(f'An error occurred: {str(e)}', 'error')
-        
-        # Create minimal data for the template
-        mock_business = {
-            'name': session.get('business_name', 'Your Business'),
-            'description': 'Unable to load business data',
-            'access_pin': session.get('access_pin', ''),
-            'id': business_id
-        }
-        
-        mock_summary = {
-            'total_customers': 0,
-            'total_credit': 0,
-            'total_payments': 0
-        }
-        
-        # Try to generate QR code with session data
-        if mock_business['access_pin']:
+                except Exception as e:
+                    print(f"ERROR getting transactions: {str(e)}")
+            
+            # Generate QR code (placeholder on Render) 
             try:
-                generate_business_qr_code(business_id, mock_business['access_pin'])
-            except:
-                pass
+                generate_business_qr_code(business_id, business['access_pin'])
+            except Exception as e:
+                print(f"ERROR generating QR code: {str(e)}")
+            
+            # Prepare data for template
+            summary = {
+                'total_customers': total_customers,
+                'total_credit': total_credit,
+                'total_payments': total_payments
+            }
+            
+            return render_template('business/dashboard.html', 
+                                business=business, 
+                                summary=summary, 
+                                transactions=transactions,
+                                customers=customers)
         
-        return render_template('business/dashboard.html', 
-                            business=mock_business, 
-                            summary=mock_summary, 
-                            transactions=[],
-                            customers=[])
+        except Exception as e:
+            # Log the full error with traceback for debugging
+            print(f"CRITICAL ERROR in business_dashboard: {str(e)}")
+            traceback.print_exc()
+            
+            # Create minimal data for the template
+            mock_business = {
+                'name': session.get('business_name', 'Your Business'),
+                'description': 'Unable to load business data',
+                'access_pin': session.get('access_pin', ''),
+                'id': business_id
+            }
+            
+            mock_summary = {
+                'total_customers': 0,
+                'total_credit': 0,
+                'total_payments': 0
+            }
+            
+            # Try to generate QR code with session data
+            if mock_business['access_pin']:
+                try:
+                    generate_business_qr_code(business_id, mock_business['access_pin'])
+                except:
+                    pass
+            
+            return render_template('business/dashboard.html', 
+                                business=mock_business, 
+                                summary=mock_summary, 
+                                transactions=[],
+                                customers=[])
+    except Exception as outer_e:
+        # Special handling for any unexpected errors
+        print(f"CATASTROPHIC ERROR in business_dashboard: {str(outer_e)}")
+        traceback.print_exc()
+        
+        # Render a simple error page with the error message
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Error - KathaPe</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
+                h1 {{ color: #e74c3c; }}
+                .error-box {{ 
+                    background-color: #f8d7da; 
+                    border: 1px solid #f5c6cb; 
+                    border-radius: 5px; 
+                    padding: 20px; 
+                    margin: 20px auto; 
+                    max-width: 800px;
+                    text-align: left;
+                    overflow: auto;
+                }}
+                .btn {{ 
+                    display: inline-block; 
+                    background-color: #5c67de; 
+                    color: white; 
+                    padding: 10px 20px; 
+                    text-decoration: none; 
+                    border-radius: 5px; 
+                    margin-top: 20px; 
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Dashboard Error</h1>
+            <p>We encountered a problem loading your dashboard.</p>
+            <div class="error-box">
+                <strong>Error details:</strong><br>
+                {str(outer_e)}
+            </div>
+            <a href="/logout" class="btn">Logout and Try Again</a>
+        </body>
+        </html>
+        """
+        return error_html
 
 @app.route('/business/customers')
 @login_required
@@ -1561,124 +1660,180 @@ def business_qr_image(business_id):
 @login_required
 @customer_required
 def customer_dashboard():
-    user_id = safe_uuid(session.get('user_id'))
-    
-    # First get customer ID if not in session
-    if 'customer_id' not in session:
-        try:
-            customer_response = query_table('customers', fields='id', filters=[('user_id', 'eq', user_id)])
-            
-            customer = customer_response.data[0] if customer_response and customer_response.data else {}
-            if customer and customer.get('id'):
-                session['customer_id'] = str(customer['id'])
-            else:
-                # If no customer record exists for this user, create one
-                customer_id = str(uuid.uuid4())
-                customer_data = {
-                    'id': customer_id,
-                    'user_id': user_id,
-                    'name': session['user_name'],
-                    'phone_number': session['phone_number'],
-                    'created_at': datetime.now().isoformat()
-                }
-                
-                # Add email if available in session
-                if session.get('email'):
-                    customer_data['email'] = session['email']
-                
-                try:
-                    insert_response = query_table('customers', query_type='insert', data=customer_data)
-                    
-                    if insert_response and insert_response.data:
-                        session['customer_id'] = str(customer_id)
-                        flash('Customer profile has been set up', 'success')
-                    else:
-                        print(f"WARNING: Failed to create customer record")
-                        session['customer_id'] = str(customer_id)  # Still set it to allow user to proceed
-                except Exception as e:
-                    print(f"ERROR creating customer record: {str(e)}")
-                    session['customer_id'] = str(customer_id)  # Still set it to allow user to proceed
-        except Exception as e:
-            print(f"ERROR retrieving customer ID: {str(e)}")
-            # Create a temporary ID to allow user to continue
-            session['customer_id'] = str(uuid.uuid4())
-    
-    customer_id = safe_uuid(session.get('customer_id'))
-    
-    # Get businesses where customer has credit
-    businesses = []
-    
     try:
-        # Use different loading strategies based on environment
-        if RENDER_DEPLOYMENT:
-            # On Render: Load minimal credit data with strict limits
-            businesses_response = query_table('customer_credits', 
-                                         fields='id,business_id,current_balance', 
-                                         filters=[('customer_id', 'eq', customer_id)],
-                                         limit=RENDER_DASHBOARD_LIMIT)
-            
-            credit_records = businesses_response.data if businesses_response and businesses_response.data else []
-            
-            # Create efficient business ID lookup
-            business_ids = [credit.get('business_id') for credit in credit_records if credit.get('business_id')]
-            
-            # If we have business IDs, get their details in a single optimized query if possible
-            business_details = {}
-            for business_id in business_ids:
-                if business_id:
-                    business_response = query_table('businesses', 
-                                               fields='id,name,description', 
-                                               filters=[('id', 'eq', business_id)])
-                    if business_response and business_response.data:
-                        business_details[business_id] = business_response.data[0]
-            
-            # Combine credit and business data with minimal processing
-            for credit in credit_records:
-                business_id = credit.get('business_id')
-                if business_id in business_details:
-                    # Merge minimal business data with credit data
-                    business_with_credit = {
-                        'id': business_id,
-                        'name': business_details[business_id].get('name', 'Unknown Business'),
-                        'description': business_details[business_id].get('description', ''),
-                        'current_balance': credit.get('current_balance', 0)
-                    }
-                    businesses.append(business_with_credit)
+        user_id = safe_uuid(session.get('user_id'))
+        
+        # First get customer ID if not in session
+        if 'customer_id' not in session:
+            try:
+                customer_response = query_table('customers', fields='id', filters=[('user_id', 'eq', user_id)])
+                
+                customer = customer_response.data[0] if customer_response and customer_response.data else {}
+                if customer and customer.get('id'):
+                    session['customer_id'] = str(customer['id'])
                 else:
-                    # Add minimal placeholder if business details not found
-                    businesses.append({
-                        'id': business_id,
-                        'name': 'Business',
-                        'current_balance': credit.get('current_balance', 0)
-                    })
-        else:
-            # In development: Load more complete data
-            businesses_response = query_table('customer_credits', filters=[('customer_id', 'eq', customer_id)])
-            credit_records = businesses_response.data if businesses_response and businesses_response.data else []
-            
-            # For each credit record, get the business details
-            for credit in credit_records:
-                business_id = credit.get('business_id')
-                if business_id:
-                    business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
-                    if business_response and business_response.data:
-                        business = business_response.data[0]
-                        # Merge business data with credit data
-                        business_with_credit = {**business, 'current_balance': credit.get('current_balance', 0)}
+                    # If no customer record exists for this user, create one
+                    customer_id = str(uuid.uuid4())
+                    customer_data = {
+                        'id': customer_id,
+                        'user_id': user_id,
+                        'name': session['user_name'],
+                        'phone_number': session['phone_number'],
+                        'created_at': datetime.now().isoformat()
+                    }
+                    
+                    # Add email if available in session
+                    if session.get('email'):
+                        customer_data['email'] = session['email']
+                    
+                    try:
+                        insert_response = query_table('customers', query_type='insert', data=customer_data)
+                        
+                        if insert_response and insert_response.data:
+                            session['customer_id'] = str(customer_id)
+                            flash('Customer profile has been set up', 'success')
+                        else:
+                            print(f"WARNING: Failed to create customer record")
+                            session['customer_id'] = str(customer_id)  # Still set it to allow user to proceed
+                    except Exception as e:
+                        print(f"ERROR creating customer record: {str(e)}")
+                        session['customer_id'] = str(customer_id)  # Still set it to allow user to proceed
+            except Exception as e:
+                print(f"ERROR retrieving customer ID: {str(e)}")
+                # Create a temporary ID to allow user to continue
+                session['customer_id'] = str(uuid.uuid4())
+        
+        customer_id = safe_uuid(session.get('customer_id'))
+        
+        # Get businesses where customer has credit
+        businesses = []
+        
+        try:
+            # Use different loading strategies based on environment
+            if RENDER_DEPLOYMENT:
+                # On Render: Load minimal credit data with strict limits
+                businesses_response = query_table('customer_credits', 
+                                             fields='id,business_id,current_balance', 
+                                             filters=[('customer_id', 'eq', customer_id)],
+                                             limit=RENDER_DASHBOARD_LIMIT)
+                
+                credit_records = businesses_response.data if businesses_response and businesses_response.data else []
+                
+                # Create efficient business ID lookup
+                business_ids = [credit.get('business_id') for credit in credit_records if credit.get('business_id')]
+                
+                # If we have business IDs, get their details in a single optimized query if possible
+                business_details = {}
+                for business_id in business_ids:
+                    if business_id:
+                        business_response = query_table('businesses', 
+                                                   fields='id,name,description', 
+                                                   filters=[('id', 'eq', business_id)])
+                        if business_response and business_response.data:
+                            business_details[business_id] = business_response.data[0]
+                
+                # Combine credit and business data with minimal processing
+                for credit in credit_records:
+                    business_id = credit.get('business_id')
+                    if business_id in business_details:
+                        # Merge minimal business data with credit data
+                        business_with_credit = {
+                            'id': business_id,
+                            'name': business_details[business_id].get('name', 'Unknown Business'),
+                            'description': business_details[business_id].get('description', ''),
+                            'current_balance': credit.get('current_balance', 0)
+                        }
                         businesses.append(business_with_credit)
                     else:
-                        # If we can't get business details, still show the credit record with minimal info
+                        # Add minimal placeholder if business details not found
                         businesses.append({
                             'id': business_id,
-                            'name': 'Unknown Business',
+                            'name': 'Business',
                             'current_balance': credit.get('current_balance', 0)
                         })
-                        
+            else:
+                # In development: Load more complete data
+                businesses_response = query_table('customer_credits', filters=[('customer_id', 'eq', customer_id)])
+                credit_records = businesses_response.data if businesses_response and businesses_response.data else []
+                
+                # For each credit record, get the business details
+                for credit in credit_records:
+                    business_id = credit.get('business_id')
+                    if business_id:
+                        business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
+                        if business_response and business_response.data:
+                            business = business_response.data[0]
+                            # Merge business data with credit data
+                            business_with_credit = {**business, 'current_balance': credit.get('current_balance', 0)}
+                            businesses.append(business_with_credit)
+                        else:
+                            # If we can't get business details, still show the credit record with minimal info
+                            businesses.append({
+                                'id': business_id,
+                                'name': 'Unknown Business',
+                                'current_balance': credit.get('current_balance', 0)
+                            })
+                            
+        except Exception as e:
+            print(f"ERROR retrieving business credits: {str(e)}")
+            # Create example business if none found - to prevent blank page
+            businesses = [{
+                'id': str(uuid.uuid4()),
+                'name': 'Example Business', 
+                'description': 'No businesses connected yet',
+                'current_balance': 0
+            }]
+        
+        return render_template('customer/dashboard.html', businesses=businesses)
+        
     except Exception as e:
-        print(f"ERROR retrieving business credits: {str(e)}")
-        # Continue with empty list
-    
-    return render_template('customer/dashboard.html', businesses=businesses)
+        # Log the error
+        print(f"CRITICAL ERROR in customer_dashboard: {str(e)}")
+        traceback.print_exc()
+        
+        # Render a simple error page with the error message
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Error - KathaPe</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
+                h1 {{ color: #e74c3c; }}
+                .error-box {{ 
+                    background-color: #f8d7da; 
+                    border: 1px solid #f5c6cb; 
+                    border-radius: 5px; 
+                    padding: 20px; 
+                    margin: 20px auto; 
+                    max-width: 800px;
+                    text-align: left;
+                    overflow: auto;
+                }}
+                .btn {{ 
+                    display: inline-block; 
+                    background-color: #5c67de; 
+                    color: white; 
+                    padding: 10px 20px; 
+                    text-decoration: none; 
+                    border-radius: 5px; 
+                    margin-top: 20px; 
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Dashboard Error</h1>
+            <p>We encountered a problem loading your dashboard.</p>
+            <div class="error-box">
+                <strong>Error details:</strong><br>
+                {str(e)}
+            </div>
+            <a href="/logout" class="btn">Logout and Try Again</a>
+        </body>
+        </html>
+        """
+        return error_html
 
 @app.route('/customer/select_business', methods=['GET', 'POST'])
 @login_required

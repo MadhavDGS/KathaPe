@@ -3,7 +3,7 @@ services:
     name: kathape
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app --timeout 120 --workers 2 --threads 4 --worker-class=gthread
+    startCommand: gunicorn wsgi:app --timeout 180 --workers 1 --threads 8 --worker-class=gthread --log-level debug
     envVars:
       - key: SUPABASE_URL
         value: https://xhczvjwwmrvmcbwjxpxd.supabase.co
@@ -20,4 +20,8 @@ services:
       - key: PORT
         value: 10000
       - key: FLASK_APP
-        value: "flask_app.py" 
+        value: "flask_app.py"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: DB_QUERY_TIMEOUT
+        value: "30" 
