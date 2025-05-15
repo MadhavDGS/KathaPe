@@ -2275,7 +2275,82 @@ def ensure_customer_credit_exists(business_id, customer_id, initial_balance=0):
     business_id = safe_uuid(business_id)
     customer_id = safe_uuid(customer_id)
     
-    # Check if relationship already exists
+    # First check if the customer exists and create if needed
+    try:
+        # Check if customer exists
+        customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
+        
+        if not customer_response or not customer_response.data:
+            # Customer doesn't exist, create a basic record
+            print(f"Customer {customer_id} not found, creating default record")
+            customer_data = {
+                'id': customer_id,
+                'user_id': str(uuid.uuid4()),  # Generate a temporary user ID
+                'name': f"Customer {customer_id[-4:]}",
+                'phone_number': f"0000{customer_id[-4:]}",
+                'created_at': datetime.now().isoformat()
+            }
+            
+            # Create customer record
+            query_table('customers', query_type='insert', data=customer_data)
+            print(f"Created customer record with ID {customer_id}")
+            
+            # Now also check if we need to create a user record
+            user_response = query_table('users', filters=[('id', 'eq', customer_data['user_id'])])
+            if not user_response or not user_response.data:
+                # Create a basic user record
+                user_data = {
+                    'id': customer_data['user_id'],
+                    'name': customer_data['name'],
+                    'phone_number': customer_data['phone_number'],
+                    'user_type': 'customer',
+                    'password': 'temporary_' + str(int(datetime.now().timestamp())),
+                    'created_at': datetime.now().isoformat()
+                }
+                query_table('users', query_type='insert', data=user_data)
+                print(f"Created user record with ID {customer_data['user_id']}")
+    except Exception as e:
+        print(f"Error ensuring customer exists: {str(e)}")
+    
+    # Check if business exists and create if needed
+    try:
+        business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
+        
+        if not business_response or not business_response.data:
+            # Business doesn't exist, create a basic record
+            print(f"Business {business_id} not found, creating default record")
+            business_user_id = str(uuid.uuid4())
+            business_data = {
+                'id': business_id,
+                'user_id': business_user_id,
+                'name': f"Business {business_id[-4:]}",
+                'description': 'Auto-created business',
+                'access_pin': f"{int(datetime.now().timestamp()) % 10000:04d}",
+                'created_at': datetime.now().isoformat()
+            }
+            
+            # Create business record
+            query_table('businesses', query_type='insert', data=business_data)
+            print(f"Created business record with ID {business_id}")
+            
+            # Create a user record for the business if needed
+            user_response = query_table('users', filters=[('id', 'eq', business_user_id)])
+            if not user_response or not user_response.data:
+                # Create a basic user record
+                user_data = {
+                    'id': business_user_id,
+                    'name': business_data['name'],
+                    'phone_number': f"0000{business_id[-4:]}",
+                    'user_type': 'business',
+                    'password': 'temporary_' + str(int(datetime.now().timestamp())),
+                    'created_at': datetime.now().isoformat()
+                }
+                query_table('users', query_type='insert', data=user_data)
+                print(f"Created user record with ID {business_user_id}")
+    except Exception as e:
+        print(f"Error ensuring business exists: {str(e)}")
+    
+    # Now check if relationship already exists
     existing_credit = query_table('customer_credits', 
                                  filters=[('business_id', 'eq', business_id),
                                          ('customer_id', 'eq', customer_id)])
