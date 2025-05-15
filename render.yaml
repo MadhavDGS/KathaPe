@@ -3,7 +3,7 @@ services:
     name: kathape
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers=1 --threads=2 --timeout=60
+    startCommand: ./run.sh
     envVars:
       - key: SUPABASE_URL
         value: https://xhczvjwwmrvmcbwjxpxd.supabase.co
