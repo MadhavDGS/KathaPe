@@ -31,15 +31,15 @@ else:
     
 # On Render, completely disable some heavy features
 if RENDER_DEPLOYMENT:
-    print("RENDER MODE: Optimizing for low CPU usage")
+    print("RENDER MODE: Optimizing for low CPU usage - keeping Supabase connections")
     # Disable PIL completely to save memory
     Image = None
     qrcode = None
     
-    # Reduce timeout values further
+    # Reduce timeout values for better performance
     DB_RETRY_ATTEMPTS = 1
     DB_RETRY_DELAY = 0.5
-    DB_QUERY_TIMEOUT = 2
+    DB_QUERY_TIMEOUT = 3
     
     # Mock QR code function to avoid any QR processing
     def generate_business_qr_code(business_id, access_pin):
