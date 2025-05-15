@@ -128,3 +128,27 @@ BEGIN
     cc.customer_id = p_customer_id;
 END;
 $$;
+
+-- Create execute_sql function for parameterized queries
+CREATE OR REPLACE FUNCTION execute_sql(query text, params jsonb DEFAULT '[]'::jsonb)
+RETURNS SETOF json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  param_values text[];
+  sql_query text;
+  i integer;
+  result json;
+BEGIN
+  -- Extract param values into an array
+  FOR i IN 0..jsonb_array_length(params) - 1 LOOP
+    param_values[i+1] := params->i;
+  END LOOP;
+
+  -- Use the query with parameters
+  EXECUTE query INTO result USING VARIADIC param_values;
+  
+  RETURN QUERY SELECT result;
+END;
+$$;
