@@ -29,9 +29,9 @@ if not RENDER_DEPLOYMENT:
 else:
     print("Running on Render - QR code generation disabled")
     
-# On Render, completely disable some heavy features
+# On Render, configure optimized settings
 if RENDER_DEPLOYMENT:
-    print("RENDER MODE: Optimizing for low CPU usage - keeping Supabase connections")
+    print("RENDER MODE: Optimizing for low CPU usage")
     # Disable PIL completely to save memory
     Image = None
     qrcode = None
@@ -132,37 +132,6 @@ except ImportError:
 except Exception as e:
     print(f"Error applying DNS patches: {str(e)}")
 
-# Import our mock authentication system
-try:
-    import auth_bypass
-    MOCK_AUTH_AVAILABLE = True
-except ImportError:
-    print("Mock auth system not available, creating placeholder")
-    MOCK_AUTH_AVAILABLE = False
-    # Create a simple placeholder module
-    class MockAuthBypass:
-        def mock_login(self, phone, password, user_type='customer'):
-            return True, {"id": str(uuid.uuid4()), "name": f"Demo {user_type.title()}"}
-            
-        def mock_register(self, phone, password, name, user_type='customer'):
-            return True, "User registered successfully"
-            
-        def mock_query_table(self, table_name, query_type='select', fields='*', filters=None, data=None):
-            class MockResponse:
-                def __init__(self, data):
-                    self.data = data
-            
-            if query_type == 'select':
-                return MockResponse([])
-            elif query_type == 'insert':
-                return MockResponse([data] if data else [])
-            elif query_type == 'update':
-                return MockResponse([])
-            else:
-                return MockResponse([])
-    
-    auth_bypass = MockAuthBypass()
-
 # Create folder structure
 upload_folder = os.getenv('UPLOAD_FOLDER', 'static/uploads')
 os.makedirs(upload_folder, exist_ok=True)
@@ -200,14 +169,9 @@ def safe_uuid(id_value):
 def get_supabase_client():
     global supabase_client, create_client
     
-    # On Render, always use mock data for now to avoid timeouts 
-    if RENDER_DEPLOYMENT:
-        print("RENDER DEPLOYMENT: Using mock data instead of Supabase to avoid timeouts")
-        return None
-    
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
-        print("Supabase module not available, using mock data")
+        print("Supabase module not available")
         return None
     
     # If we already have a client, return it
@@ -269,7 +233,6 @@ def get_supabase_client():
                     raise
     except Exception as e:
         print(f"Failed to connect to Supabase: {str(e)}")
-        print("Falling back to mock data system")
         return None
 
 # Get a Supabase client with service role permissions with version-compatible options
@@ -278,7 +241,7 @@ def get_supabase_admin_client():
     
     # If Supabase is not available, just return None
     if not SUPABASE_AVAILABLE:
-        print("Supabase module not available, using mock data")
+        print("Supabase module not available")
         return None
     
     # If we already have an admin client, return it
@@ -332,7 +295,6 @@ def get_supabase_admin_client():
                     raise
     except Exception as e:
         print(f"Failed to connect to Supabase with admin privileges after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
-        print("Falling back to mock data system")
         return None
 
 # File upload helper function
@@ -346,18 +308,18 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
     """
     Safely query a Supabase table with proper error handling
     """
-    # On Render, always use mock data to prevent timeouts
-    if RENDER_DEPLOYMENT:
-        print(f"RENDER MODE: Using mock data for {table_name} ({query_type})")
-        return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+    # Create an empty response class to use as fallback when Supabase is unavailable
+    class EmptyResponse:
+        def __init__(self):
+            self.data = []
     
     try:
         # Get Supabase client
         client = get_supabase_client()
         
         if not client:
-            print("No Supabase client available, using mock data")
-            return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+            print(f"No Supabase client available for {table_name}")
+            return EmptyResponse()
         
         # Handle different query types
         if query_type == 'select':
@@ -422,12 +384,11 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
             
         else:
             print(f"ERROR: Invalid query type: {query_type}")
-            return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+            return EmptyResponse()
         
     except Exception as e:
         print(f"Supabase query error: {str(e)}")
-        print(f"Falling back to mock data")
-        return auth_bypass.mock_query_table(table_name, query_type, fields, filters, data)
+        return EmptyResponse()
 
 # Timeout-aware database query function
 def timeout_query(func, *args, **kwargs):
@@ -604,6 +565,10 @@ def register():
             # Get admin database connection for auth operations
             supabase = get_supabase_admin_client()
             
+            if not supabase:
+                flash('Registration failed: Database connection error', 'error')
+                return render_template('register.html')
+            
             # Check if phone number already exists
             existing_user = supabase.table('users').select('id').eq('phone_number', phone).execute()
             if existing_user.data:
@@ -627,15 +592,8 @@ def register():
             user_response = supabase.table('users').insert(user_data).execute()
             
             if not user_response or not user_response.data:
-                print(f"DEBUG: Failed to create user with Supabase, trying mock system")
-                # Fall back to mock registration
-                success, message = auth_bypass.mock_register(phone, password, name, user_type)
-                if success:
-                    flash('Registration successful! Please login.', 'success')
-                    return redirect(url_for('login'))
-                else:
-                    flash(f'Registration failed: {message}', 'error')
-                    return render_template('register.html')
+                flash('Registration failed: Database error', 'error')
+                return render_template('register.html')
             
             print(f"DEBUG: User created with ID {user_id}")
             
@@ -646,19 +604,7 @@ def register():
         except Exception as e:
             print(f"DEBUG: Registration error: {str(e)}")
             traceback.print_exc()
-            
-            # Fall back to mock registration
-            try:
-                success, message = auth_bypass.mock_register(phone, password, name, user_type)
-                if success:
-                    flash('Registration successful! Please login.', 'success')
-                    return redirect(url_for('login'))
-                else:
-                    flash(f'Registration failed: {message}', 'error')
-            except Exception as mock_error:
-                print(f"DEBUG: Mock registration error: {str(mock_error)}")
-                flash(f'An error occurred: {str(e)}', 'error')
-                
+            flash(f'Registration failed: {str(e)}', 'error')
             return render_template('register.html')
     
     return render_template('register.html')
@@ -682,22 +628,7 @@ def login():
         user_name = f"User {phone[-4:]}"
         
         try:
-            # Set default session data that will be overridden if DB operations succeed
-            session['user_id'] = user_id
-            session['user_name'] = user_name
-            session['user_type'] = user_type
-            session['phone_number'] = phone
-            
-            if user_type == 'business':
-                business_id = str(uuid.uuid4())
-                session['business_id'] = business_id
-                session['business_name'] = f"{user_name}'s Business"
-                session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-            else:
-                customer_id = str(uuid.uuid4())
-                session['customer_id'] = customer_id
-            
-            # First attempt Supabase authentication - prioritize this over mock
+            # Try Supabase authentication
             def find_user():
                 # Get client and query
                 client = get_supabase_client()
@@ -707,91 +638,74 @@ def login():
             
             user_response = timeout_query(find_user)
             
-            if user_response and user_response.data:
-                print(f"DEBUG: Found user with matching phone number: {user_response.data[0].get('id')}")
-                user = user_response.data[0]
-                user_id = user['id']
-                session['user_id'] = user_id
-                session['user_name'] = user.get('name', user_name)
-                
-                # Verify password - simplified for this implementation
-                if user.get('password') != password:
-                    flash('Invalid password', 'error')
-                    # Try mock login as a fallback
-                    success, mock_user = auth_bypass.mock_login(phone, password, user_type)
-                    if success:
-                        flash('Login successful with demo account', 'success')
-                        if user_type == 'business':
-                            return redirect(url_for('business_dashboard'))
-                        else:
-                            return redirect(url_for('customer_dashboard'))
-                    return render_template('login.html')
-                
-                flash('Login successful!', 'success')
-                
-                # Check user type and retrieve associated records
-                if user_type == 'business':
-                    # Try to get business record
-                    def get_business():
-                        client = get_supabase_client()
-                        if not client:
-                            return None
-                        return client.table('businesses').select('*').eq('user_id', user_id).execute()
-                    
-                    business_response = timeout_query(get_business)
-                    
-                    if business_response and business_response.data:
-                        business = business_response.data[0]
-                        session['business_id'] = business['id']
-                        session['business_name'] = business.get('name', f"{user_name}'s Business")
-                        session['access_pin'] = business.get('access_pin', session.get('access_pin'))
-                    
-                    return redirect(url_for('business_dashboard'))
-                else:
-                    # Try to get customer record
-                    def get_customer():
-                        client = get_supabase_client()
-                        if not client:
-                            return None
-                        return client.table('customers').select('*').eq('user_id', user_id).execute()
-                    
-                    customer_response = timeout_query(get_customer)
-                    
-                    if customer_response and customer_response.data:
-                        customer = customer_response.data[0]
-                        session['customer_id'] = customer['id']
-                    
-                    return redirect(url_for('customer_dashboard'))
-            else:
-                print(f"DEBUG: No user found with phone number {phone} in Supabase")
-                
-                # Only now try mock login as a fallback
-                success, mock_user = auth_bypass.mock_login(phone, password, user_type)
-                if success:
-                    print(f"DEBUG: Mock authentication successful")
-                    flash('Login successful with demo account', 'info')
-                    if user_type == 'business':
-                        return redirect(url_for('business_dashboard'))
-                    else:
-                        return redirect(url_for('customer_dashboard'))
-                
-                flash('Invalid credentials', 'error')
+            if not user_response or not user_response.data:
+                flash('Invalid credentials: User not found', 'error')
                 return render_template('login.html')
+            
+            print(f"DEBUG: Found user with matching phone number: {user_response.data[0].get('id')}")
+            user = user_response.data[0]
+            user_id = user['id']
+            
+            # Verify password - simplified for this implementation
+            if user.get('password') != password:
+                flash('Invalid password', 'error')
+                return render_template('login.html')
+            
+            # Set up session data
+            session['user_id'] = user_id
+            session['user_name'] = user.get('name', user_name)
+            session['user_type'] = user_type
+            session['phone_number'] = phone
+            
+            flash('Login successful!', 'success')
+            
+            # Check user type and retrieve associated records
+            if user_type == 'business':
+                # Try to get business record
+                def get_business():
+                    client = get_supabase_client()
+                    if not client:
+                        return None
+                    return client.table('businesses').select('*').eq('user_id', user_id).execute()
+                
+                business_response = timeout_query(get_business)
+                
+                if business_response and business_response.data:
+                    business = business_response.data[0]
+                    session['business_id'] = business['id']
+                    session['business_name'] = business.get('name', f"{user.get('name')}'s Business")
+                    session['access_pin'] = business.get('access_pin', f"{int(datetime.now().timestamp()) % 10000:04d}")
+                else:
+                    # Create default business data
+                    business_id = str(uuid.uuid4())
+                    session['business_id'] = business_id
+                    session['business_name'] = f"{user.get('name')}'s Business"
+                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                
+                return redirect(url_for('business_dashboard'))
+            else:
+                # Try to get customer record
+                def get_customer():
+                    client = get_supabase_client()
+                    if not client:
+                        return None
+                    return client.table('customers').select('*').eq('user_id', user_id).execute()
+                
+                customer_response = timeout_query(get_customer)
+                
+                if customer_response and customer_response.data:
+                    customer = customer_response.data[0]
+                    session['customer_id'] = customer['id']
+                else:
+                    # Create default customer data
+                    customer_id = str(uuid.uuid4())
+                    session['customer_id'] = customer_id
+                
+                return redirect(url_for('customer_dashboard'))
                 
         except Exception as e:
             print(f"DEBUG: Login error: {str(e)}")
             traceback.print_exc()
-            
-            # Try mock login as a fallback
-            success, mock_user = auth_bypass.mock_login(phone, password, user_type)
-            if success:
-                print(f"DEBUG: Mock authentication successful after error")
-                flash('Login successful with demo account', 'warning')
-                if user_type == 'business':
-                    return redirect(url_for('business_dashboard'))
-                else:
-                    return redirect(url_for('customer_dashboard'))
-            
             flash('Login failed. Please try again.', 'error')
             return render_template('login.html')
     
@@ -914,84 +828,69 @@ def business_dashboard():
         transactions = []
         customers = []
         
-        # For Render deployment, limit queries to reduce CPU usage
-        if not RENDER_DEPLOYMENT:
-            try:
-                # Get customer credits to display customers on dashboard
-                customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
-                customer_credits = customers_response.data if customers_response and customers_response.data else []
-                
-                # Total customers
-                total_customers = len(customer_credits)
-                
-                # Get customer details for each customer credit
-                for credit in customer_credits:
-                    customer_id = safe_uuid(credit.get('customer_id'))
-                    try:
-                        customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
-                        if customer_response and customer_response.data:
-                            customer = customer_response.data[0]
-                            # Merge customer details with credit information
-                            customer_with_credit = {
-                                **customer,
-                                'current_balance': credit.get('current_balance', 0)
-                            }
-                            customers.append(customer_with_credit)
-                    except Exception as e:
-                        print(f"ERROR retrieving customer {customer_id}: {str(e)}")
-                
-            except Exception as e:
-                print(f"ERROR getting customers count: {str(e)}")
+        try:
+            # Get customer credits to display customers on dashboard
+            customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
+            customer_credits = customers_response.data if customers_response and customers_response.data else []
             
-            try:
-                # Total credit
-                credit_response = query_table('transactions', fields='amount', 
-                                            filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
-                total_credit = sum([t.get('amount', 0) for t in credit_response.data]) if credit_response and credit_response.data else 0
-            except Exception as e:
-                print(f"ERROR getting credit total: {str(e)}")
+            # Total customers
+            total_customers = len(customer_credits)
             
-            try:
-                # Total payments
-                payment_response = query_table('transactions', fields='amount',
-                                            filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
-                total_payments = sum([t.get('amount', 0) for t in payment_response.data]) if payment_response and payment_response.data else 0
-            except Exception as e:
-                print(f"ERROR getting payment total: {str(e)}")
+            # Get customer details for each customer credit
+            for credit in customer_credits:
+                customer_id = safe_uuid(credit.get('customer_id'))
+                try:
+                    customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
+                    if customer_response and customer_response.data:
+                        customer = customer_response.data[0]
+                        # Merge customer details with credit information
+                        customer_with_credit = {
+                            **customer,
+                            'current_balance': credit.get('current_balance', 0)
+                        }
+                        customers.append(customer_with_credit)
+                except Exception as e:
+                    print(f"ERROR retrieving customer {customer_id}: {str(e)}")
             
-            try:
-                # Recent transactions
-                transactions_response = query_table('transactions', 
-                                                filters=[('business_id', 'eq', business_id)])
-                transactions = transactions_response.data if transactions_response and transactions_response.data else []
-                
-                # Get customer names for transactions
-                for transaction in transactions:
-                    customer_id = safe_uuid(transaction.get('customer_id'))
-                    try:
-                        customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
-                        if customer_response and customer_response.data:
-                            transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
-                        else:
-                            transaction['customer_name'] = 'Unknown'
-                    except Exception as e:
-                        print(f"ERROR getting customer name: {str(e)}")
+        except Exception as e:
+            print(f"ERROR getting customers count: {str(e)}")
+        
+        try:
+            # Total credit
+            credit_response = query_table('transactions', fields='amount', 
+                                        filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
+            total_credit = sum([t.get('amount', 0) for t in credit_response.data]) if credit_response and credit_response.data else 0
+        except Exception as e:
+            print(f"ERROR getting credit total: {str(e)}")
+        
+        try:
+            # Total payments
+            payment_response = query_table('transactions', fields='amount',
+                                        filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
+            total_payments = sum([t.get('amount', 0) for t in payment_response.data]) if payment_response and payment_response.data else 0
+        except Exception as e:
+            print(f"ERROR getting payment total: {str(e)}")
+        
+        try:
+            # Recent transactions
+            transactions_response = query_table('transactions', 
+                                            filters=[('business_id', 'eq', business_id)])
+            transactions = transactions_response.data if transactions_response and transactions_response.data else []
+            
+            # Get customer names for transactions
+            for transaction in transactions:
+                customer_id = safe_uuid(transaction.get('customer_id'))
+                try:
+                    customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
+                    if customer_response and customer_response.data:
+                        transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
+                    else:
                         transaction['customer_name'] = 'Unknown'
-            except Exception as e:
-                print(f"ERROR getting transactions: {str(e)}")
-        else:
-            # On Render deployment: load minimal data to reduce CPU
-            try:
-                # Just get count from customer_credits
-                customers_response = query_table('customer_credits', fields='id', filters=[('business_id', 'eq', business_id)])
-                total_customers = len(customers_response.data) if customers_response and customers_response.data else 0
-                
-                # Add minimal mock data
-                customers = [{'name': 'Minimal Mode - CPU Saving', 'current_balance': 0}]
-                transactions = [{'customer_name': 'Minimal Mode', 'amount': 0, 'transaction_type': 'credit', 'created_at': datetime.now().isoformat()}]
-                print("RENDER MODE: Using minimal data to reduce CPU usage")
-            except Exception as e:
-                print(f"ERROR in minimal data mode: {str(e)}")
+                except Exception as e:
+                    print(f"ERROR getting customer name: {str(e)}")
+                    transaction['customer_name'] = 'Unknown'
+        except Exception as e:
+            print(f"ERROR getting transactions: {str(e)}")
         
         # Generate QR code (placeholder on Render) 
         try:
@@ -1554,60 +1453,30 @@ def customer_dashboard():
     # Get businesses where customer has credit
     businesses = []
     
-    # For Render deployment, limit queries to reduce CPU usage
-    if RENDER_DEPLOYMENT:
-        try:
-            # Minimal data mode for Render
-            # Just get count of business relations
-            businesses_response = query_table('customer_credits', fields='business_id', filters=[('customer_id', 'eq', customer_id)])
-            credit_records = businesses_response.data if businesses_response and businesses_response.data else []
-            
-            # Create simplified business objects
-            for i, credit in enumerate(credit_records[:3]):  # Only process first 3
-                business_id = credit.get('business_id')
-                if business_id:
+    try:
+        businesses_response = query_table('customer_credits', filters=[('customer_id', 'eq', customer_id)])
+        credit_records = businesses_response.data if businesses_response and businesses_response.data else []
+        
+        # For each credit record, get the business details
+        for credit in credit_records:
+            business_id = credit.get('business_id')
+            if business_id:
+                business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
+                if business_response and business_response.data:
+                    business = business_response.data[0]
+                    # Merge business data with credit data
+                    business_with_credit = {**business, 'current_balance': credit.get('current_balance', 0)}
+                    businesses.append(business_with_credit)
+                else:
+                    # If we can't get business details, still show the credit record with minimal info
                     businesses.append({
                         'id': business_id,
-                        'name': f'Business {i+1}',
-                        'current_balance': 0
+                        'name': 'Unknown Business',
+                        'current_balance': credit.get('current_balance', 0)
                     })
-            
-            if len(credit_records) > 3:
-                # Add a placeholder for "more businesses"
-                businesses.append({
-                    'id': 'more',
-                    'name': f'And {len(credit_records) - 3} more...',
-                    'current_balance': 0
-                })
-                
-            print("RENDER MODE: Using minimal data to reduce CPU usage")
-        except Exception as e:
-            print(f"ERROR in minimal data mode: {str(e)}")
-    else:
-        try:
-            businesses_response = query_table('customer_credits', filters=[('customer_id', 'eq', customer_id)])
-            credit_records = businesses_response.data if businesses_response and businesses_response.data else []
-            
-            # For each credit record, get the business details
-            for credit in credit_records:
-                business_id = credit.get('business_id')
-                if business_id:
-                    business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
-                    if business_response and business_response.data:
-                        business = business_response.data[0]
-                        # Merge business data with credit data
-                        business_with_credit = {**business, 'current_balance': credit.get('current_balance', 0)}
-                        businesses.append(business_with_credit)
-                    else:
-                        # If we can't get business details, still show the credit record with minimal info
-                        businesses.append({
-                            'id': business_id,
-                            'name': 'Unknown Business',
-                            'current_balance': credit.get('current_balance', 0)
-                        })
-        except Exception as e:
-            print(f"ERROR retrieving business credits: {str(e)}")
-            # Continue with empty list
+    except Exception as e:
+        print(f"ERROR retrieving business credits: {str(e)}")
+        # Continue with empty list
     
     return render_template('customer/dashboard.html', businesses=businesses)
 
