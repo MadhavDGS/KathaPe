@@ -1,4 +1,5 @@
-==== SQL to Disable RLS and Setup Tables ====
+-- SQL to Disable RLS and Setup Tables
+-- ============================================
 
 -- Disable Row Level Security for all Katha tables
 ALTER TABLE IF EXISTS users DISABLE ROW LEVEL SECURITY;
