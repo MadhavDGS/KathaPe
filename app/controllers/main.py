@@ -153,22 +153,21 @@ def customer_dashboard():
                               customers=demo_data,
                               total_credits="500.00")
     
-    # For regular accounts, use the RPC function that bypasses RLS issues
-    customer_result = None
+    # For regular accounts, use the admin_supabase to bypass RLS issues
     try:
-        # Get customer ID for the current user
-        customer_result = current_app.supabase.rpc(
-            'get_customer_by_user_id', 
-            {'p_user_id': user['id']}
-        ).execute()
+        # Get customer ID for the current user using admin_supabase
+        customer_result = current_app.admin_supabase.table('customers') \
+            .select('*') \
+            .eq('user_id', user['id']) \
+            .execute()
         
         # If customer found, get their credits across businesses
-        if customer_result.data:
+        if customer_result.data and len(customer_result.data) > 0:
             customer = customer_result.data[0]
             credit_records = []
             
-            # Get all credits for this customer
-            credits_result = current_app.supabase.table('customer_credits') \
+            # Get all credits for this customer using admin_supabase
+            credits_result = current_app.admin_supabase.table('customer_credits') \
                 .select('*, businesses(name)') \
                 .eq('customer_id', customer['id']) \
                 .execute()

@@ -58,6 +58,28 @@ def login():
                         session['user_id'] = user['id']
                         session['user_type'] = user['user_type']
                         
+                        # If customer account, ensure customer data is properly synced
+                        if user['user_type'] == 'customer':
+                            try:
+                                # Check if customer record exists
+                                customer_check = current_app.admin_supabase.table('customers') \
+                                    .select('id') \
+                                    .eq('user_id', user['id']) \
+                                    .execute()
+                                
+                                # If no customer record, create one
+                                if not customer_check.data or len(customer_check.data) == 0:
+                                    customer_data = {
+                                        'user_id': user['id'],
+                                        'name': user['name'],
+                                        'phone_number': user['phone_number'],
+                                        'email': user['email'] if 'email' in user else None
+                                    }
+                                    current_app.admin_supabase.table('customers').insert(customer_data).execute()
+                            except Exception as customer_sync_error:
+                                print(f"Customer data sync error: {str(customer_sync_error)}")
+                                # Continue login process even if sync fails
+                        
                         flash('Login successful!', 'success')
                         if user['user_type'] == 'business':
                             return redirect(url_for('main.dashboard'))
