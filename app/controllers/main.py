@@ -137,6 +137,7 @@ def dashboard():
 @customer_required
 def customer_dashboard():
     user = get_current_user()
+    print(f"Customer dashboard - User ID: {user['id']}, Name: {user['name']}")
     
     # For all customer accounts, use admin_supabase to bypass RLS issues
     try:
@@ -155,7 +156,7 @@ def customer_dashboard():
             
             # Get all credits for this customer using admin_supabase
             credits_result = current_app.admin_supabase.table('customer_credits') \
-                .select('*, businesses(name)') \
+                .select('*, businesses(*)') \
                 .eq('customer_id', customer['id']) \
                 .execute()
             
@@ -165,18 +166,22 @@ def customer_dashboard():
             
             if credits_result.data:
                 for credit in credits_result.data:
+                    print(f"Processing credit record: {credit}")
                     business_name = credit['businesses']['name'] if credit['businesses'] else 'Unknown Business'
+                    current_balance = credit.get('current_balance', 0)
                     credit_records.append({
                         'business_name': business_name,
-                        'credit_amount': "{:.2f}".format(float(credit['current_balance'])),
-                        'last_updated': credit['updated_at']
+                        'credit_amount': "{:.2f}".format(float(current_balance)),
+                        'last_updated': credit.get('updated_at', datetime.now().strftime("%Y-%m-%d %H:%M"))
                     })
-                    total_credit += float(credit['current_balance'])
+                    total_credit += float(current_balance)
             
             return render_template('main/customer_dashboard.html', 
                                   user=user, 
                                   customers=credit_records,
                                   total_credits="{:.2f}".format(total_credit))
+        else:
+            print("No customer record found for this user")
     except Exception as e:
         print(f"Error fetching customer data: {str(e)}")
         flash("Unable to fetch customer data. Please try again later.", "danger")
@@ -327,8 +332,8 @@ def customer_view(business_id):
     """View customers for a specific business - business owners only"""
     user = get_current_user()
     
-    # Get business details and verify ownership
-    business_result = current_app.supabase.table('businesses') \
+    # Get business details and verify ownership - use admin_supabase
+    business_result = current_app.admin_supabase.table('businesses') \
         .select('*') \
         .eq('id', business_id) \
         .eq('user_id', user['id']) \
@@ -340,19 +345,21 @@ def customer_view(business_id):
     
     business = business_result.data[0]
     
-    # Get customers with credits for this business
-    customers_result = current_app.supabase.table('customer_credits') \
+    # Get customers with credits for this business - use admin_supabase
+    customers_result = current_app.admin_supabase.table('customer_credits') \
         .select('*, customers(*)') \
         .eq('business_id', business_id) \
         .execute()
+    
+    print(f"Customer credits query result: {customers_result.data}")
     
     customers = []
     if customers_result.data:
         for credit in customers_result.data:
             if credit['customers']:
                 customer = credit['customers']
-                customer['credit_amount'] = credit['credit_amount']
-                customer['last_updated'] = credit['last_updated']
+                customer['credit_amount'] = "{:.2f}".format(float(credit['current_balance']))
+                customer['last_updated'] = credit['updated_at']
                 customers.append(customer)
     
     return render_template('main/customer_view.html', business=business, customers=customers)
@@ -363,11 +370,13 @@ def customer_detail(customer_id):
     """View details of a specific customer - business owners only"""
     user = get_current_user()
     
-    # Get customer details with business info
-    customer_result = current_app.supabase.table('customer_credits') \
+    # Get customer details with business info - use admin_supabase
+    customer_result = current_app.admin_supabase.table('customer_credits') \
         .select('*, customers(*), businesses(*)') \
         .eq('customer_id', customer_id) \
         .execute()
+    
+    print(f"Customer detail query result: {customer_result.data}")
     
     if not customer_result.data:
         flash('Customer not found.', 'danger')
@@ -382,13 +391,13 @@ def customer_detail(customer_id):
         flash('You do not have permission to view this customer.', 'danger')
         return redirect(url_for('main.dashboard'))
     
-    customer['credit_amount'] = credit['credit_amount']
+    customer['credit_amount'] = "{:.2f}".format(float(credit['current_balance']))
     
-    # Get credit history
-    history_result = current_app.supabase.table('credit_history') \
+    # Get credit history - use admin_supabase
+    history_result = current_app.admin_supabase.table('credit_history') \
         .select('*') \
         .eq('customer_credit_id', credit['id']) \
-        .order('date', desc=True) \
+        .order('created_at', desc=True) \
         .execute()
     
     history = history_result.data
