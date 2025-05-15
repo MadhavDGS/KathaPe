@@ -122,7 +122,7 @@ except Exception as e:
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Critical Application Error</title>
+            <title>Application Error</title>
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <style>
                 body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
@@ -140,13 +140,13 @@ except Exception as e:
             </style>
         </head>
         <body>
-            <h1>Critical Application Error</h1>
-            <p>The application could not be started due to a critical error.</p>
+            <h1>Application Error</h1>
+            <p>The application could not be started due to import errors.</p>
             <div class="error-box">
                 <strong>Error details:</strong><br>
-                {str(e)}
+                Flask application failed to initialize properly.
                 <hr>
-                <pre>{traceback.format_exc()}</pre>
+                <p>Please check server logs for details.</p>
             </div>
         </body>
         </html>

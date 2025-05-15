@@ -199,7 +199,7 @@ app.wsgi_app = RequestLoggerMiddleware(app.wsgi_app)
 print(f"DEBUG INFO: Flask app created with secret_key: {app.secret_key[:5]}...")
 print(f"DEBUG INFO: Debug mode: {app.debug}")
 print(f"DEBUG INFO: Testing mode: {app.testing}")
-print(f"DEBUG INFO: Environment: {app.env}")
+print(f"DEBUG INFO: Environment: {os.environ.get('FLASK_ENV', 'production')}")
 print(f"DEBUG INFO: RENDER_DEPLOYMENT: {RENDER_DEPLOYMENT}")
 
 # Environment variables - hardcoded for easy deployment
