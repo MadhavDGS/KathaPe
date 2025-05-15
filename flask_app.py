@@ -925,13 +925,16 @@ def login():
                     return redirect(url_for('business_dashboard'))
                 else:
                     return redirect(url_for('customer_dashboard'))
-                
-        except Exception as e:
-            # Catch all errors and use emergency login as a last resort
-            logger.critical(f"CRITICAL ERROR in login: {str(e)}")
-            traceback.print_exc()
+        
+        # GET request handling for login page
+        return render_template('login.html')
             
-            # Set emergency session data
+    except Exception as e:
+        # Ultimate fallback for any errors
+        logger.critical(f"CRITICAL ERROR in login route: {str(e)}")
+        
+        # Set emergency session data if there was a POST request
+        if request.method == 'POST':
             emergency_user_id = str(uuid.uuid4())
             emergency_user_type = request.form.get('user_type', 'customer')
             
@@ -979,11 +982,8 @@ def login():
             </html>
             """
             return html
-    except Exception as e:
-        # Ultimate fallback for any errors
-        logger.critical(f"CRITICAL ERROR in login route: {str(e)}")
         
-        # Ultra simple login form
+        # Ultra simple login form for GET requests with errors
         html = """
         <!DOCTYPE html>
         <html>
