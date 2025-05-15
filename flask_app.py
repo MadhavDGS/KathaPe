@@ -37,9 +37,9 @@ if RENDER_DEPLOYMENT:
     qrcode = None
     
     # Aggressive performance settings for Render
-    DB_RETRY_ATTEMPTS = 1
-    DB_RETRY_DELAY = 0.5
-    DB_QUERY_TIMEOUT = 3
+    DB_RETRY_ATTEMPTS = 2
+    DB_RETRY_DELAY = 1.0
+    DB_QUERY_TIMEOUT = 30  # Increase timeout to prevent worker timeouts
     RENDER_QUERY_LIMIT = 10  # Limit number of results returned in queries
     RENDER_DASHBOARD_LIMIT = 5  # Limit items shown on dashboard
     
@@ -658,13 +658,24 @@ def login():
         try:
             # Try Supabase authentication
             def find_user():
-                # Get client and query
+                # Get client and query - only select needed fields to improve performance
                 client = get_supabase_client()
                 if not client:
                     return None
-                return client.table('users').select('*').eq('phone_number', phone).execute()
+                
+                # Optimized single query with only required fields
+                return client.table('users').select('id,name,password,user_type').eq('phone_number', phone).execute()
+            
+            # Extra logging for Render
+            if RENDER_DEPLOYMENT:
+                print(f"RENDER: Starting user lookup for phone={phone}")
+                start_time = time.time()
             
             user_response = timeout_query(find_user)
+            
+            if RENDER_DEPLOYMENT:
+                elapsed_time = time.time() - start_time
+                print(f"RENDER: User lookup completed in {elapsed_time:.2f} seconds")
             
             if not user_response or not user_response.data:
                 flash('Invalid credentials: User not found', 'error')
@@ -687,16 +698,32 @@ def login():
             
             flash('Login successful!', 'success')
             
-            # Check user type and retrieve associated records
+            # Check if user type matches the expected user type
+            if user.get('user_type') and user.get('user_type') != user_type:
+                print(f"WARNING: User type mismatch. Expected {user_type}, got {user.get('user_type')}")
+                flash(f"Switching to your {user.get('user_type')} account", 'info')
+                user_type = user.get('user_type')
+                session['user_type'] = user_type
+            
+            # Fetch profile data based on user type - optimize queries
             if user_type == 'business':
-                # Try to get business record
+                # Try to get business record with minimal fields
+                if RENDER_DEPLOYMENT:
+                    print(f"RENDER: Starting business lookup for user_id={user_id}")
+                    start_time = time.time()
+                    
+                # Simplified business query
                 def get_business():
                     client = get_supabase_client()
                     if not client:
                         return None
-                    return client.table('businesses').select('*').eq('user_id', user_id).execute()
+                    return client.table('businesses').select('id,name,access_pin').eq('user_id', user_id).execute()
                 
                 business_response = timeout_query(get_business)
+                
+                if RENDER_DEPLOYMENT:
+                    elapsed_time = time.time() - start_time
+                    print(f"RENDER: Business lookup completed in {elapsed_time:.2f} seconds")
                 
                 if business_response and business_response.data:
                     business = business_response.data[0]
@@ -712,14 +739,23 @@ def login():
                 
                 return redirect(url_for('business_dashboard'))
             else:
-                # Try to get customer record
+                # Try to get customer record with minimal fields
+                if RENDER_DEPLOYMENT:
+                    print(f"RENDER: Starting customer lookup for user_id={user_id}")
+                    start_time = time.time()
+                
+                # Simplified customer query
                 def get_customer():
                     client = get_supabase_client()
                     if not client:
                         return None
-                    return client.table('customers').select('*').eq('user_id', user_id).execute()
+                    return client.table('customers').select('id').eq('user_id', user_id).execute()
                 
                 customer_response = timeout_query(get_customer)
+                
+                if RENDER_DEPLOYMENT:
+                    elapsed_time = time.time() - start_time
+                    print(f"RENDER: Customer lookup completed in {elapsed_time:.2f} seconds")
                 
                 if customer_response and customer_response.data:
                     customer = customer_response.data[0]
