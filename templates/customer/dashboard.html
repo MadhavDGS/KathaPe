@@ -392,8 +392,8 @@
             </a>
         </div>
 
-        {% if businesses %}
-            <div class="businesses-list">
+        <div class="businesses-list">
+            {% if businesses %}
                 {% for business in businesses %}
                     <a href="{{ url_for('customer_business_view', business_id=business.id) }}" class="business-card">
                         <div class="business-card-inner">
@@ -405,9 +405,9 @@
                                 {% endif %}
                             </div>
                             <div class="business-info">
-                                <div class="business-name">{{ business.name }}</div>
-                                <div class="business-balance {% if business.current_balance < 0 %}positive{% endif %}">
-                                    Balance: {{ business.current_balance|abs }}
+                                <div class="business-name">{{ business.name|default('Business') }}</div>
+                                <div class="business-balance {% if business.current_balance > 0 %}positive{% endif %}">
+                                    ₹{{ business.current_balance|default(0)|abs }}
                                 </div>
                             </div>
                             <div class="business-arrow">
@@ -416,16 +416,19 @@
                         </div>
                     </a>
                 {% endfor %}
-            </div>
-        {% else %}
-            <div class="empty-state">
-                <i class="fas fa-store-slash"></i>
-                <p>You haven't connected with any businesses yet.</p>
-                <a href="{{ url_for('select_business') }}" class="btn primary-btn">
-                    <i class="fas fa-plus"></i> Connect with a Business
-                </a>
-            </div>
-        {% endif %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-store"></i>
+                    </div>
+                    <p class="empty-message">No business credits yet</p>
+                    <p class="empty-description">Add a business credit by scanning a QR code</p>
+                    <a href="{{ url_for('scan_qr') }}" class="btn-primary">
+                        <i class="fas fa-qrcode"></i> Scan Business QR
+                    </a>
+                </div>
+            {% endif %}
+        </div>
     </div>
 
     <div class="dashboard-section">
