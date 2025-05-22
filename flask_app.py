@@ -1264,6 +1264,14 @@ def logout():
 def business_dashboard():
     try:
         user_id = safe_uuid(session.get('user_id'))
+    except Exception as e:
+        flash(f'Error loading dashboard: {str(e)}', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        # Get business details by user_id
+        business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
+    except Exception as e:
         
         try:
             # Get business details by user_id
@@ -1553,6 +1561,8 @@ def business_dashboard():
                                 summary=summary, 
                                 transactions=transactions,
                                 customers=customers)
+        except Exception as e:
+            pass  # Added by fix_flask_app.py
     except Exception as e:
         flash(f'Error loading dashboard: {str(e)}', 'error')
         return redirect(url_for('login'))
@@ -3251,7 +3261,7 @@ def admin_fix_balances():
     
     return redirect(url_for('index'))
 
-# Run the application
+# Add a test route to verify QR code format
 @app.route('/test/qr/<access_pin>')
 def test_qr(access_pin):
     """Test route to verify QR code format"""
@@ -3320,4 +3330,3 @@ if __name__ == '__main__':
     # Set host to 0.0.0.0 to make it accessible outside the container
     app.run(debug=False, host='0.0.0.0', port=port) 
 
-# Add a test route to verify QR code format
