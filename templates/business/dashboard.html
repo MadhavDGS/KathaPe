@@ -20,6 +20,9 @@
         <div class="profile-info">
             <h2>{{ business.name }}</h2>
             <p>{{ business.description }}</p>
+            <a href="{{ url_for('business_profile') }}" class="edit-profile-link">
+                <i class="fas fa-edit"></i> Edit Profile
+            </a>
         </div>
     </div>
 
@@ -74,6 +77,9 @@
                     <img src="{{ url_for('business_qr_image', business_id=business.id) }}" alt="Business QR Code" onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/placeholder_qr.png') }}';">
                 </div>
                 <p class="qr-info">Scan to connect with {{ business.name }}</p>
+                <a href="{{ url_for('business_qr_image', business_id=business.id, refresh=1) }}" class="qr-refresh-btn" onclick="refreshQRCode(event)">
+                    <i class="fas fa-sync-alt"></i> Refresh QR Code
+                </a>
             </div>
         </div>
     </div>
@@ -240,6 +246,25 @@ body {
     margin: 0;
     color: var(--text-muted);
     font-size: 14px;
+}
+
+.edit-profile-link {
+    display: inline-block;
+    margin-top: 10px;
+    color: var(--primary-color);
+    font-size: 14px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.edit-profile-link:hover {
+    color: #4152b3;
+    transform: translateX(3px);
+}
+
+.edit-profile-link i {
+    margin-right: 5px;
 }
 
 /* Summary Cards */
@@ -445,6 +470,28 @@ body {
     font-size: 14px;
     color: var(--text-muted);
     margin: 0;
+}
+
+.qr-refresh-btn {
+    display: inline-block;
+    margin-top: 10px;
+    text-decoration: none;
+    color: var(--primary-color);
+    font-size: 14px;
+    font-weight: 600;
+    background-color: rgba(92, 103, 222, 0.1);
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.qr-refresh-btn:hover {
+    background-color: rgba(92, 103, 222, 0.2);
+    transform: translateY(-2px);
+}
+
+.qr-refresh-btn i {
+    margin-right: 5px;
 }
 
 /* Section Headers */
@@ -751,4 +798,45 @@ body {
         height: 150px;
     }
 }
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function refreshQRCode(event) {
+        event.preventDefault();
+        
+        const qrImage = document.querySelector('.qr-code img');
+        const refreshBtn = event.target.closest('.qr-refresh-btn');
+        const originalBtnText = refreshBtn.innerHTML;
+        
+        // Show loading state
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+        refreshBtn.style.pointerEvents = 'none';
+        
+        // Add a timestamp to force cache refresh
+        const timestamp = new Date().getTime();
+        const refreshUrl = refreshBtn.getAttribute('href') + '&t=' + timestamp;
+        
+        // Create a new image element
+        const newImage = new Image();
+        newImage.onload = function() {
+            // Replace the old image with the new one
+            qrImage.src = newImage.src;
+            
+            // Reset button state
+            refreshBtn.innerHTML = originalBtnText;
+            refreshBtn.style.pointerEvents = 'auto';
+        };
+        
+        newImage.onerror = function() {
+            // Handle error
+            refreshBtn.innerHTML = originalBtnText;
+            refreshBtn.style.pointerEvents = 'auto';
+            alert('Failed to refresh QR code. Please try again.');
+        };
+        
+        // Load the new image
+        newImage.src = refreshUrl;
+    }
+</script>
 {% endblock %} 

@@ -17,6 +17,10 @@ from functools import wraps
 from dotenv import load_dotenv
 import sys
 import logging
+import io
+import base64
+import qrcode
+from PIL import Image
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -139,7 +143,23 @@ else:
                 print("QR code generation not available, using placeholder")
                 return "static/images/placeholder_qr.png"
             
+            # Make sure we have a valid PIN
+            if not access_pin:
+                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                print(f"WARNING: No access pin provided, generating temporary: {access_pin}")
+                
+                # Update the database with this PIN if possible
+                try:
+                    query_table('businesses', query_type='update', 
+                                data={'access_pin': access_pin},
+                                filters=[('id', 'eq', business_id)])
+                except Exception as e:
+                    print(f"Failed to update business with new PIN: {str(e)}")
+            
+            # Format: "business:PIN" - this is what the scanner expects
             qr_data = f"business:{access_pin}"
+            print(f"Generating QR code with data: {qr_data}")
+            
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -1253,7 +1273,10 @@ def business_dashboard():
                 business = business_response.data[0]
                 session['business_id'] = business['id']
                 session['business_name'] = business['name']
-                session['access_pin'] = business['access_pin']
+                
+                # Only store the access_pin in session if it exists in the database
+                if business.get('access_pin'):
+                    session['access_pin'] = business['access_pin']
             else:
                 # Create a new business record
                 try:
@@ -1261,6 +1284,7 @@ def business_dashboard():
                     supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
                     
                     business_id = str(uuid.uuid4())
+                    # Generate a new access_pin only when creating a new business
                     access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
                     
                     business_data = {
@@ -1305,14 +1329,18 @@ def business_dashboard():
                     temp_id = str(uuid.uuid4())
                     session['business_id'] = temp_id
                     session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                    # Only generate a new access_pin if one doesn't exist in session
+                    if 'access_pin' not in session:
+                        session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
         except Exception as e:
             flash(f'Error retrieving business: {str(e)}', 'error')
             # Create a temporary session business to allow user to continue
             temp_id = str(uuid.uuid4())
             session['business_id'] = temp_id
             session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-            session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+            # Only generate a new access_pin if one doesn't exist in session
+            if 'access_pin' not in session:
+                session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
         
         business_id = safe_uuid(session.get('business_id'))
         
@@ -1323,17 +1351,28 @@ def business_dashboard():
             if business_response and business_response.data:
                 business = business_response.data[0]
                 
-                # If access_pin is missing, generate one
-                if not business.get('access_pin'):
+                # If access_pin is missing in database but exists in session, update the database
+                if not business.get('access_pin') and session.get('access_pin'):
+                    try:
+                        query_table('businesses', query_type='update', 
+                                data={'access_pin': session['access_pin']},
+                                filters=[('id', 'eq', business_id)])
+                        business['access_pin'] = session['access_pin']
+                    except Exception as e:
+                        print(f"ERROR updating access_pin: {str(e)}")
+                # If access_pin is missing in both database and session, generate a new one
+                elif not business.get('access_pin') and not session.get('access_pin'):
                     access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
                     try:
                         query_table('businesses', query_type='update', 
                                 data={'access_pin': access_pin},
                                 filters=[('id', 'eq', business_id)])
                         business['access_pin'] = access_pin
+                        session['access_pin'] = access_pin
                     except Exception as e:
                         print(f"ERROR updating access_pin: {str(e)}")
-                        business['access_pin'] = session.get('access_pin', access_pin)
+                        business['access_pin'] = access_pin
+                        session['access_pin'] = access_pin
             else:
                 # Create a mock business object from session data
                 business = {
@@ -1350,83 +1389,151 @@ def business_dashboard():
             transactions = []
             customers = []
             
-            # Use consistent approach for both local and Render deployment
             try:
-                # Get all customer credits for this business - consistent with business_customers route
-                customers_response = query_table('customer_credits', filters=[('business_id', 'eq', business_id)])
-                customer_credits = customers_response.data if customers_response and customers_response.data else []
+                # Connect directly to database for more reliable results
+                conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                    # Get total customers count
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM customer_credits 
+                        WHERE business_id = %s
+                    """, [business_id])
+                    total_customers = cursor.fetchone()[0]
+                    
+                    # Get customer details for the latest customers
+                    cursor.execute("""
+                        SELECT c.*, cc.current_balance 
+                        FROM customers c
+                        JOIN customer_credits cc ON c.id = cc.customer_id
+                        WHERE cc.business_id = %s
+                        ORDER BY cc.created_at DESC
+                        LIMIT 5
+                    """, [business_id])
+                    
+                    customers_data = cursor.fetchall()
+                    for customer in customers_data:
+                        customers.append(dict(customer))
+                    
+                    # Get recent transactions
+                    cursor.execute("""
+                        SELECT t.*, c.name as customer_name
+                        FROM transactions t
+                        LEFT JOIN customers c ON t.customer_id = c.id
+                        WHERE t.business_id = %s
+                        ORDER BY t.created_at DESC
+                        LIMIT 5
+                    """, [business_id])
+                    
+                    transactions_data = cursor.fetchall()
+                    for tx in transactions_data:
+                        transactions.append(dict(tx))
+                    
+                    # Calculate total credit given
+                    cursor.execute("""
+                        SELECT COALESCE(SUM(amount), 0) as total
+                        FROM transactions
+                        WHERE business_id = %s AND transaction_type = 'credit'
+                    """, [business_id])
+                    total_credit = cursor.fetchone()[0]
+                    
+                    # Calculate total payments
+                    cursor.execute("""
+                        SELECT COALESCE(SUM(current_balance), 0) as total
+                        FROM customer_credits
+                        WHERE business_id = %s AND current_balance > 0
+                    """, [business_id])
+                    total_payments = cursor.fetchone()[0]
                 
-                # Total customers
-                total_customers = len(customer_credits)
-                
-                # Get customer details for each customer credit - same approach as business_customers
-                for credit in customer_credits:
-                    customer_id = safe_uuid(credit.get('customer_id'))
-                    if customer_id:
-                        try:
-                            customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
-                            if customer_response and customer_response.data:
-                                customer = customer_response.data[0]
-                                # Merge customer details with credit information
-                                customer_with_credit = {
-                                    **customer,
-                                    'current_balance': credit.get('current_balance', 0)
-                                }
-                                customers.append(customer_with_credit)
-                        except Exception as e:
-                            print(f"ERROR retrieving customer {customer_id}: {str(e)}")
-                
-                # Apply limit only after fetching all real data
-                if RENDER_DEPLOYMENT and len(customers) > RENDER_DASHBOARD_LIMIT:
-                    customers = customers[:RENDER_DASHBOARD_LIMIT]
-                
-                # Get transactions
-                transactions_response = query_table('transactions', 
-                                                filters=[('business_id', 'eq', business_id)])
-                transactions = transactions_response.data if transactions_response and transactions_response.data else []
-                
-                # Apply limit to transactions for Render
-                if RENDER_DEPLOYMENT and len(transactions) > RENDER_DASHBOARD_LIMIT:
-                    transactions = transactions[:RENDER_DASHBOARD_LIMIT]
-                
-                # Get customer names for transactions
-                for transaction in transactions:
-                    customer_id = safe_uuid(transaction.get('customer_id'))
-                    try:
-                        customer_response = query_table('customers', fields='name', filters=[('id', 'eq', customer_id)])
-                        if customer_response and customer_response.data:
-                            transaction['customer_name'] = customer_response.data[0].get('name', 'Unknown')
-                        else:
-                            transaction['customer_name'] = 'Unknown'
-                    except Exception as e:
-                        print(f"ERROR getting customer name: {str(e)}")
-                        transaction['customer_name'] = 'Unknown'
-                
-                # Calculate totals
-                try:
-                    # Total credit
-                    credit_response = query_table('transactions', fields='amount', 
-                                                filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
-                    total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
-                except Exception as e:
-                    print(f"ERROR getting credit total: {str(e)}")
-                
-                try:
-                    # Total payments
-                    payment_response = query_table('transactions', fields='amount',
-                                                filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'payment')])
-                    total_payments = sum([float(t.get('amount', 0)) for t in payment_response.data]) if payment_response and payment_response.data else 0
-                except Exception as e:
-                    print(f"ERROR getting payment total: {str(e)}")
+                conn.close()
                 
             except Exception as e:
-                print(f"ERROR in data loading: {str(e)}")
-                # Don't create mock data, just leave empty lists
-                total_customers = 0
-                total_credit = 0
-                total_payments = 0
-                transactions = []
-                customers = []
+                print(f"ERROR in database connection: {str(e)}")
+                # Fallback to query_table if direct connection fails
+                try:
+                    # Total customers
+                    customer_response = query_table('customer_credits', 
+                                                fields='customer_id',
+                                                filters=[('business_id', 'eq', business_id)])
+                    if customer_response and customer_response.data:
+                        total_customers = len(customer_response.data)
+                        
+                        # Get customer details for the first few customers
+                        if total_customers > 0:
+                            customer_ids = [c['customer_id'] for c in customer_response.data[:5]]
+                            
+                            for customer_id in customer_ids:
+                                try:
+                                    # Get customer details
+                                    customer_detail = query_table('customers', 
+                                                            filters=[('id', 'eq', customer_id)])
+                                    if customer_detail and customer_detail.data:
+                                        customer = customer_detail.data[0]
+                                        
+                                        # Get current balance
+                                        credit_detail = query_table('customer_credits', 
+                                                            filters=[('business_id', 'eq', business_id),
+                                                                    ('customer_id', 'eq', customer_id)])
+                                        
+                                        if credit_detail and credit_detail.data:
+                                            credit = credit_detail.data[0]
+                                            customer['current_balance'] = float(credit.get('current_balance', 0))
+                                        else:
+                                            customer['current_balance'] = 0
+                                        
+                                        customers.append(customer)
+                                except Exception as e:
+                                    print(f"ERROR getting customer details: {str(e)}")
+                    
+                    # Get recent transactions
+                    try:
+                        transaction_response = query_table('transactions', 
+                                                        filters=[('business_id', 'eq', business_id)],
+                                                        order_by='created_at:desc',
+                                                        limit=5)
+                        
+                        if transaction_response and transaction_response.data:
+                            transactions = transaction_response.data
+                            
+                            # Add customer names to transactions
+                            for tx in transactions:
+                                try:
+                                    customer_id = tx.get('customer_id')
+                                    customer_detail = query_table('customers', 
+                                                            filters=[('id', 'eq', customer_id)])
+                                    
+                                    if customer_detail and customer_detail.data:
+                                        tx['customer_name'] = customer_detail.data[0].get('name', 'Unknown')
+                                    else:
+                                        tx['customer_name'] = 'Unknown'
+                                except Exception as e:
+                                    print(f"ERROR getting customer name: {str(e)}")
+                    except Exception as e:
+                        print(f"ERROR getting transactions: {str(e)}")
+                    
+                    try:
+                        # Total credit given
+                        credit_response = query_table('transactions', fields='amount',
+                                                    filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
+                        total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
+                    except Exception as e:
+                        print(f"ERROR getting credit total: {str(e)}")
+                    
+                    try:
+                        # Total payments
+                        payment_response = query_table('customer_credits', fields='current_balance',
+                                                    filters=[('business_id', 'eq', business_id)])
+                        total_payments = sum([float(t.get('current_balance', 0)) for t in payment_response.data if float(t.get('current_balance', 0)) > 0]) if payment_response and payment_response.data else 0
+                    except Exception as e:
+                        print(f"ERROR getting payment total: {str(e)}")
+                    
+                except Exception as e:
+                    print(f"ERROR in data loading: {str(e)}")
+                    # Don't create mock data, just leave empty lists
+                    total_customers = 0
+                    total_credit = 0
+                    total_payments = 0
+                    transactions = []
+                    customers = []
             
             # Generate QR code (placeholder on Render) 
             try:
@@ -1446,86 +1553,9 @@ def business_dashboard():
                                 summary=summary, 
                                 transactions=transactions,
                                 customers=customers)
-        
-        except Exception as e:
-            # Log the full error with traceback for debugging
-            print(f"CRITICAL ERROR in business_dashboard: {str(e)}")
-            traceback.print_exc()
-            
-            # Create minimal data for the template
-            mock_business = {
-                'name': session.get('business_name', 'Your Business'),
-                'description': 'Unable to load business data',
-                'access_pin': session.get('access_pin', ''),
-                'id': business_id
-            }
-            
-            mock_summary = {
-                'total_customers': 0,
-                'total_credit': 0,
-                'total_payments': 0
-            }
-            
-            # Try to generate QR code with session data
-            if mock_business['access_pin']:
-                try:
-                    generate_business_qr_code(business_id, mock_business['access_pin'])
-                except:
-                    pass
-            
-            return render_template('business/dashboard.html', 
-                                business=mock_business, 
-                                summary=mock_summary, 
-                                transactions=[],
-                                customers=[])
-    except Exception as outer_e:
-        # Special handling for any unexpected errors
-        print(f"CATASTROPHIC ERROR in business_dashboard: {str(outer_e)}")
-        traceback.print_exc()
-        
-        # Render a simple error page with the error message
-        error_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Error - KathaPe</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-                body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
-                h1 {{ color: #e74c3c; }}
-                .error-box {{ 
-                    background-color: #f8d7da; 
-                    border: 1px solid #f5c6cb; 
-                    border-radius: 5px; 
-                    padding: 20px; 
-                    margin: 20px auto; 
-                    max-width: 800px;
-                    text-align: left;
-                    overflow: auto;
-                }}
-                .btn {{ 
-                    display: inline-block; 
-                    background-color: #5c67de; 
-                    color: white; 
-                    padding: 10px 20px; 
-                    text-decoration: none; 
-                    border-radius: 5px; 
-                    margin-top: 20px; 
-                }}
-            </style>
-        </head>
-        <body>
-            <h1>Dashboard Error</h1>
-            <p>We encountered a problem loading your dashboard.</p>
-            <div class="error-box">
-                <strong>Error details:</strong><br>
-                {str(outer_e)}
-            </div>
-            <a href="/logout" class="btn">Logout and Try Again</a>
-        </body>
-        </html>
-        """
-        return error_html
+    except Exception as e:
+        flash(f'Error loading dashboard: {str(e)}', 'error')
+        return redirect(url_for('login'))
 
 @app.route('/business/customers')
 @login_required
@@ -1963,10 +1993,35 @@ def business_qr_image(business_id):
         qr_filename = os.path.join(qr_folder, f"{business_id}.png")
         
         # Generate a new QR code if it doesn't exist
-        if not os.path.exists(qr_filename):
-            access_pin = business.get('access_pin', '0000')
-            # Generate QR code
+        if not os.path.exists(qr_filename) or request.args.get('refresh', '0') == '1':
+            access_pin = business.get('access_pin')
+            
+            # Make sure we have a valid access_pin
+            if not access_pin:
+                # Generate a new PIN if it doesn't exist
+                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                print(f"QR generation: Access pin not found, generating new one: {access_pin}")
+                
+                # Update the business record with this PIN
+                try:
+                    query_table('businesses', 
+                                query_type='update',
+                                data={'access_pin': access_pin},
+                                filters=[('id', 'eq', business_id)])
+                    
+                    # Update the session if this is the current business
+                    if session.get('business_id') == business_id:
+                        session['access_pin'] = access_pin
+                        
+                    # Update the business object
+                    business['access_pin'] = access_pin
+                except Exception as e:
+                    print(f"Failed to update business record with PIN: {str(e)}")
+            
+            # Generate QR code with the correct format: "business:PIN"
             qr_data = f"business:{access_pin}"
+            print(f"Generating QR code for business {business_id} with data: {qr_data}")
+            
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -1984,6 +2039,7 @@ def business_qr_image(business_id):
     
     except Exception as e:
         print(f"ERROR generating QR code image: {str(e)}")
+        traceback.print_exc()
         # Return placeholder image on error
         return send_from_directory('static/images', 'placeholder_qr.png', mimetype='image/png')
 
@@ -2540,6 +2596,20 @@ def customer_transaction():
             # Insert transaction directly using psycopg2
             conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
             with conn.cursor() as cursor:
+                # First ensure the customer_credits record exists
+                cursor.execute("""
+                    INSERT INTO customer_credits (id, business_id, customer_id, current_balance, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (business_id, customer_id) DO NOTHING
+                """, [
+                    str(uuid.uuid4()),
+                    business_id,
+                    customer_id,
+                    0,
+                    datetime.now().isoformat(),
+                    datetime.now().isoformat()
+                ])
+                
                 # Insert transaction
                 transaction_id = str(uuid.uuid4())
                 print(f"Creating new transaction: id={transaction_id}, type={transaction_type}, amount={amount}")
@@ -2568,45 +2638,25 @@ def customer_transaction():
                     conn.commit()
                     print("Transaction committed to database")
                     
-                    # Debug: Check if the database trigger updated the balance
+                    # Manually update the balance since the trigger might not be working correctly
+                    # Calculate the balance adjustment based on transaction type
+                    balance_adjustment = amount if transaction_type == 'credit' else -amount
+                    
+                    cursor.execute("""
+                        UPDATE customer_credits
+                        SET current_balance = current_balance + %s,
+                            updated_at = %s
+                        WHERE business_id = %s AND customer_id = %s
+                    """, [balance_adjustment, datetime.now().isoformat(), business_id, customer_id])
+                    conn.commit()
+                    
+                    # Verify the balance was updated correctly
                     cursor.execute("""
                         SELECT current_balance FROM customer_credits
                         WHERE business_id = %s AND customer_id = %s
                     """, [business_id, customer_id])
-                    trigger_result = cursor.fetchone()
-                    trigger_balance = trigger_result[0] if trigger_result else None
-                    print(f"DEBUG: Balance after trigger: {trigger_balance}")
-                    
-                    # Manually update the balance since the trigger is working backwards
-                    # Recalculate the correct balance
-                    cursor.execute("""
-                        SELECT transaction_type, amount 
-                        FROM transactions 
-                        WHERE business_id = %s AND customer_id = %s
-                    """, [business_id, customer_id])
-                    
-                    all_transactions = cursor.fetchall()
-                    
-                    credit_total = 0
-                    payment_total = 0
-                    
-                    for tx in all_transactions:
-                        if tx[0] == 'credit':
-                            credit_total += float(tx[1])
-                        else:  # payment
-                            payment_total += float(tx[1])
-                    
-                    # Calculate correct balance
-                    correct_balance = credit_total - payment_total
-                    print(f"DEBUG: Recalculated balance: {correct_balance}")
-                    
-                    # Update the balance in the database
-                    cursor.execute("""
-                        UPDATE customer_credits
-                        SET current_balance = %s,
-                            updated_at = %s
-                        WHERE business_id = %s AND customer_id = %s
-                    """, [correct_balance, datetime.now().isoformat(), business_id, customer_id])
+                    updated_balance = cursor.fetchone()[0]
+                    print(f"Updated balance: {updated_balance}")
                     
                 except Exception as e:
                     print(f"Error inserting transaction: {str(e)}")
@@ -2615,20 +2665,12 @@ def customer_transaction():
                     conn.close()
                     return redirect(url_for('customer_business_view'))
                 
-                # Get the current balance from the database (maintained by trigger)
-                cursor.execute("""
-                    SELECT current_balance FROM customer_credits
-                    WHERE business_id = %s AND customer_id = %s
-                """, [business_id, customer_id])
-                balance_result = cursor.fetchone()
-                current_balance = float(balance_result[0]) if balance_result else 0
-                print(f"Current balance from database: {current_balance}")
-                
             conn.commit()
             conn.close()
             flash('Transaction added successfully', 'success')
         except Exception as e:
             print(f"Database query error: {str(e)}")
+            traceback.print_exc()
             flash(f'Error adding transaction: {str(e)}', 'error')
         
         return redirect(url_for('customer_business_view', business_id=business_id))
@@ -2650,9 +2692,39 @@ def customer_transaction():
                 WHERE c.id = %s
             """, [business_id, customer_id])
             customer = cursor.fetchone() or {'id': customer_id, 'name': 'Customer', 'current_balance': 0}
+            
+            # Ensure customer_credits record exists
+            if customer.get('current_balance') is None:
+                cursor.execute("""
+                    INSERT INTO customer_credits (id, business_id, customer_id, current_balance, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (business_id, customer_id) DO NOTHING
+                    RETURNING current_balance
+                """, [
+                    str(uuid.uuid4()),
+                    business_id,
+                    customer_id,
+                    0,
+                    datetime.now().isoformat(),
+                    datetime.now().isoformat()
+                ])
+                balance_result = cursor.fetchone()
+                if balance_result:
+                    customer['current_balance'] = balance_result[0]
+                else:
+                    customer['current_balance'] = 0
+                conn.commit()
+            
+            # Convert to dict if it's a DictRow
+            if not isinstance(business, dict):
+                business = dict(business)
+            if not isinstance(customer, dict):
+                customer = dict(customer)
+                
         conn.close()
     except Exception as e:
         print(f"Error fetching data for transaction form: {str(e)}")
+        traceback.print_exc()
         business = {'id': business_id, 'name': 'Business', 'profile_photo_url': None}
         customer = {'id': customer_id, 'name': 'Customer', 'current_balance': 0}
     
@@ -3185,3 +3257,65 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5003))
     # Set host to 0.0.0.0 to make it accessible outside the container
     app.run(debug=False, host='0.0.0.0', port=port) 
+
+# Add a test route to verify QR code format
+@app.route('/test/qr/<access_pin>')
+def test_qr(access_pin):
+    """Test route to verify QR code format"""
+    try:
+        # If QR code generation is not available, return text
+        if not QR_AVAILABLE:
+            return f"<p>QR code generation not available. Format would be: business:{access_pin}</p>"
+        
+        # Format: "business:PIN"
+        qr_data = f"business:{access_pin}"
+        
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        
+        # Create QR code image
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to base64 for embedding in HTML
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        # Return HTML with embedded QR code
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>QR Code Test</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ font-family: Arial, sans-serif; text-align: center; padding: 20px; }}
+                .qr-container {{ margin: 20px auto; max-width: 300px; }}
+                .qr-data {{ margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px; }}
+                pre {{ text-align: left; overflow-x: auto; }}
+            </style>
+        </head>
+        <body>
+            <h1>QR Code Test</h1>
+            <div class="qr-container">
+                <img src="data:image/png;base64,{img_str}" alt="QR Code" style="width: 100%;">
+            </div>
+            <div class="qr-data">
+                <p>QR Code Data:</p>
+                <pre>{qr_data}</pre>
+            </div>
+            <p>Scan this QR code with the app to test.</p>
+        </body>
+        </html>
+        """
+        
+        return html
+    except Exception as e:
+        return f"<p>Error generating QR code: {str(e)}</p>"

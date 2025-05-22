@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Business Profile{% endblock %}
+
+{% block header_title %}Business Profile{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <div class="profile-card">
+        <div class="card-header">
+            <h2>Business Profile</h2>
+            <p>Manage your business information</p>
+        </div>
+        
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="name">Business Name</label>
+                    <input type="text" id="name" name="name" class="form-control" value="{{ business.name }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" class="form-control" rows="3">{{ business.description }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="address">Address</label>
+                    <textarea id="address" name="address" class="form-control" rows="2">{{ business.address }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone" class="form-control" value="{{ business.phone }}">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" class="form-control" value="{{ business.email }}">
+                </div>
+                
+                <div class="form-group">
+                    <label>Business PIN</label>
+                    <div class="pin-display">
+                        <span class="pin">{{ business.access_pin }}</span>
+                        <span class="pin-note">This PIN is used by customers to connect with your business</span>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="profile_photo">Profile Photo</label>
+                    <div class="profile-photo-container">
+                        {% if business.profile_photo_url %}
+                            <div class="current-photo">
+                                <img src="{{ business.profile_photo_url }}" alt="Business Profile">
+                            </div>
+                        {% endif %}
+                        <input type="file" id="profile_photo" name="profile_photo" class="form-control-file" accept="image/*">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{{ url_for('business_dashboard') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block inline_css %}
+.profile-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px 16px;
+}
+
+.profile-card {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.card-header {
+    padding: 20px;
+    background: linear-gradient(135deg, var(--primary-color), #4152b3);
+    color: white;
+}
+
+.card-header h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.card-header p {
+    margin: 0;
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 15px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--text-color);
+    font-size: 16px;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(92, 103, 222, 0.2);
+}
+
+.form-control-file {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text-color);
+    width: 100%;
+}
+
+.pin-display {
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 12px 15px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pin {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary-color);
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.pin-note {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.profile-photo-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.current-photo {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+.current-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #4152b3;
+    transform: translateY(-2px);
+}
+
+.btn-secondary {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-color);
+}
+
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+{% endblock %} 

@@ -13,7 +13,7 @@
         </div>
         
         <div class="video-container">
-            <video id="qr-video" autoplay playsinline></video>
+            <div id="qr-reader"></div>
             <div class="scan-region-highlight"></div>
             <div class="scan-message">Scanning...</div>
         </div>
@@ -75,13 +75,38 @@
     height: 0;
     padding-bottom: 100%;
     overflow: hidden;
+    background-color: #000;
 }
 
-#qr-video {
+#qr-reader {
     position: absolute;
     width: 100%;
     height: 100%;
+    background-color: #000;
+    z-index: 5;
+}
+
+#qr-reader video {
     object-fit: cover;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+/* Fix for hidden video element */
+#qr-reader__dashboard_section_csr span button {
+    margin-right: 5px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+/* Hide default HTML5-QRCode scanner UI elements we don't need */
+#qr-reader__dashboard_section {
+    display: none !important;
 }
 
 .scan-region-highlight {
@@ -94,6 +119,7 @@
     height: 60%;
     box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
     pointer-events: none;
+    z-index: 10;
 }
 
 .scan-message {
@@ -106,6 +132,7 @@
     text-align: center;
     padding: 10px;
     font-size: 14px;
+    z-index: 20;
 }
 
 .scanner-footer {
@@ -131,35 +158,92 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const video = document.getElementById('qr-video');
         const scanMessage = document.querySelector('.scan-message');
         const flipButton = document.getElementById('flip-camera');
+        const qrReader = document.getElementById('qr-reader');
         
         let currentCamera = 'environment'; // Start with back camera
+        let html5QrCode;
+        let scanning = false;
         
-        // Initialize QR Scanner
-        const html5QrCode = new Html5Qrcode("qr-video", { formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ] });
-        const config = { fps: 10, qrbox: {width: 250, height: 250} };
+        // Configuration for scanner
+        const config = { 
+            fps: 10, 
+            qrbox: {width: 250, height: 250},
+            aspectRatio: 1,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: true,
+            videoConstraints: {
+                facingMode: currentCamera
+            }
+        };
         
-        // Start scanner with back camera by default
-        startScanner();
+        // Initialize and start the scanner
+        function initScanner() {
+            // Create a new instance
+            html5QrCode = new Html5Qrcode("qr-reader");
+            
+            // Start scanning
+            startScanner();
+        }
         
         // Function to start the scanner
         function startScanner() {
+            if (scanning) return;
+            
+            scanning = true;
+            scanMessage.textContent = 'Scanning...';
+            
+            // Make sure the QR reader is visible
+            qrReader.style.display = 'block';
+            qrReader.style.backgroundColor = '#000';
+            
+            // Update video constraints with current camera
+            config.videoConstraints = {
+                facingMode: currentCamera
+            };
+            
             html5QrCode.start(
                 { facingMode: currentCamera },
                 config,
                 onQRCodeSuccess,
                 onQRCodeError
             ).catch(err => {
+                scanning = false;
                 scanMessage.textContent = 'Camera access error: ' + err;
+                console.error("QR Scanner error:", err);
+                
+                // Try with a more basic configuration
+                setTimeout(() => {
+                    scanMessage.textContent = 'Retrying with basic camera settings...';
+                    html5QrCode.start(
+                        { facingMode: currentCamera },
+                        { fps: 5, qrbox: 250 },
+                        onQRCodeSuccess,
+                        onQRCodeError
+                    ).catch(err2 => {
+                        scanMessage.textContent = 'Could not access camera. Please check permissions.';
+                        console.error("Second QR Scanner error:", err2);
+                    });
+                }, 1000);
+            });
+        }
+        
+        // Function to stop the scanner
+        function stopScanner() {
+            if (!scanning) return;
+            
+            html5QrCode.stop().then(() => {
+                scanning = false;
+            }).catch(err => {
+                console.error("Error stopping scanner:", err);
             });
         }
         
         // Success callback when QR code is scanned
         function onQRCodeSuccess(decodedText, decodedResult) {
             // Stop scanning
-            html5QrCode.stop();
+            stopScanner();
             
             scanMessage.textContent = 'QR Code detected! Connecting...';
             
@@ -195,10 +279,21 @@
         
         // Flip camera button
         flipButton.addEventListener('click', function() {
-            html5QrCode.stop().then(() => {
-                currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
-                startScanner();
-            });
+            if (!scanning) return;
+            
+            stopScanner();
+            currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+            setTimeout(() => startScanner(), 500);
+        });
+        
+        // Initialize scanner when page loads
+        initScanner();
+        
+        // Clean up when leaving the page
+        window.addEventListener('beforeunload', function() {
+            if (scanning) {
+                stopScanner();
+            }
         });
     });
 </script>
