@@ -3252,13 +3252,6 @@ def admin_fix_balances():
     return redirect(url_for('index'))
 
 # Run the application
-if __name__ == '__main__':
-    # Get port from environment variable for Render compatibility
-    port = int(os.environ.get('PORT', 5003))
-    # Set host to 0.0.0.0 to make it accessible outside the container
-    app.run(debug=False, host='0.0.0.0', port=port) 
-
-# Add a test route to verify QR code format
 @app.route('/test/qr/<access_pin>')
 def test_qr(access_pin):
     """Test route to verify QR code format"""
@@ -3319,3 +3312,12 @@ def test_qr(access_pin):
         return html
     except Exception as e:
         return f"<p>Error generating QR code: {str(e)}</p>"
+
+# Run the application
+if __name__ == '__main__':
+    # Get port from environment variable for Render compatibility
+    port = int(os.environ.get('PORT', 5003))
+    # Set host to 0.0.0.0 to make it accessible outside the container
+    app.run(debug=False, host='0.0.0.0', port=port) 
+
+# Add a test route to verify QR code format
