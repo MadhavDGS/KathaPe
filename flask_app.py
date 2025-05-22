@@ -1829,6 +1829,31 @@ def business_transactions(customer_id):
                 file.save(filepath)
                 media_url = f"/static/uploads/{unique_filename}"
         
+        # Check if the user exists in the database
+        try:
+            # First check if user exists
+            user_exists = execute_query("SELECT id FROM users WHERE id = %s", [user_id], fetch_one=True)
+            
+            # If user doesn't exist, create one
+            if not user_exists:
+                print(f"User {user_id} not found in database. Creating user record.")
+                execute_query("""
+                    INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, [
+                    user_id,
+                    session.get('user_name', f"User {user_id[-8:]}"),
+                    session.get('phone_number', f"0000{user_id[-8:]}"),
+                    'business',
+                    'temporary_' + str(int(datetime.now().timestamp())),
+                    datetime.now().isoformat()
+                ])
+                print(f"Created user record with ID {user_id}")
+        except Exception as e:
+            print(f"Error checking or creating user: {str(e)}")
+            traceback.print_exc()
+            # Continue with transaction creation - the query_table function will handle any errors
+            
         # Use the enhanced transaction function with media support
         transaction_data = {
             'id': str(uuid.uuid4()),
@@ -1844,9 +1869,26 @@ def business_transactions(customer_id):
         if media_url:
             transaction_data['media_url'] = media_url
         
-        query_table('transactions', query_type='insert', data=transaction_data)
-        
-        flash('Transaction added successfully', 'success')
+        try:
+            # Insert transaction directly using execute_query instead of query_table
+            # This gives us more control over the error handling
+            columns = list(transaction_data.keys())
+            placeholders = ["%s"] * len(columns)
+            values = [transaction_data[col] for col in columns]
+            
+            query = f"INSERT INTO transactions ({', '.join(columns)}) VALUES ({', '.join(placeholders)}) RETURNING id"
+            
+            transaction_result = execute_query(query, values, fetch_one=True, commit=True)
+            
+            if transaction_result:
+                flash('Transaction added successfully', 'success')
+            else:
+                flash('Failed to add transaction. Please try again.', 'error')
+        except Exception as e:
+            print(f"Error adding transaction: {str(e)}")
+            traceback.print_exc()
+            flash(f'Error adding transaction: {str(e)}', 'error')
+            
         return redirect(url_for('business_customer_details', customer_id=customer_id))
     
     # GET request handling
@@ -1894,6 +1936,31 @@ def remind_customer(customer_id):
     business = business_response.data[0] if business_response and business_response.data else {}
     
     if customer:
+        # Check if the user_id exists in the database
+        try:
+            # First check if user exists
+            user_exists = execute_query("SELECT id FROM users WHERE id = %s", [user_id], fetch_one=True)
+            
+            # If user doesn't exist, create one
+            if not user_exists:
+                print(f"User {user_id} not found in database. Creating user record before sending reminder.")
+                execute_query("""
+                    INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, [
+                    user_id,
+                    session.get('user_name', f"User {user_id[-8:]}"),
+                    session.get('phone_number', f"0000{user_id[-8:]}"),
+                    'business',
+                    'temporary_' + str(int(datetime.now().timestamp())),
+                    datetime.now().isoformat()
+                ])
+                print(f"Created user record with ID {user_id}")
+        except Exception as e:
+            print(f"Error checking or creating user: {str(e)}")
+            traceback.print_exc()
+            # Continue with reminder creation
+        
         # Record the reminder in the database
         reminder_data = {
             'id': str(uuid.uuid4()),
@@ -1906,16 +1973,28 @@ def remind_customer(customer_id):
         }
         
         try:
-            query_table('reminders', query_type='insert', data=reminder_data)
+            # Insert reminder directly using execute_query instead of query_table
+            columns = list(reminder_data.keys())
+            placeholders = ["%s"] * len(columns)
+            values = [reminder_data[col] for col in columns]
+            
+            query = f"INSERT INTO reminders ({', '.join(columns)}) VALUES ({', '.join(placeholders)}) RETURNING id"
+            
+            execute_query(query, values, commit=True)
             
             # Also update the customer_credits record with the reminder date
-            query_table('customer_credits', 
-                       query_type='update',
-                       data={'last_reminder_date': datetime.now().isoformat()},
-                       filters=[('business_id', 'eq', business_id),
-                               ('customer_id', 'eq', customer_id)])
+            execute_query("""
+                UPDATE customer_credits 
+                SET last_reminder_date = %s
+                WHERE business_id = %s AND customer_id = %s
+            """, [
+                datetime.now().isoformat(),
+                business_id,
+                customer_id
+            ], commit=True)
         except Exception as e:
             print(f"Error recording reminder: {str(e)}")
+            traceback.print_exc()
             # Continue anyway to send the reminder
         
         # Check for WhatsApp number and redirect to WhatsApp
@@ -2573,6 +2652,27 @@ def customer_transaction():
                     datetime.now().isoformat()
                 ])
                 conn.commit()
+                
+            # Check if the user_id exists in the database
+            cursor.execute("SELECT id FROM users WHERE id = %s", [user_id])
+            user_exists = cursor.fetchone()
+            
+            # If the user doesn't exist, create it to avoid foreign key constraint errors
+            if not user_exists:
+                print(f"User {user_id} not found, creating user record")
+                cursor.execute("""
+                    INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, [
+                    user_id,
+                    session.get('user_name', f"User {user_id[-8:]}"),
+                    session.get('phone_number', f"0000{user_id[-8:]}"),
+                    'customer',
+                    'temporary_' + str(int(datetime.now().timestamp())),
+                    datetime.now().isoformat()
+                ])
+                conn.commit()
+                print(f"Created user record with ID {user_id}")
         conn.close()
     except Exception as e:
         print(f"Error ensuring business exists: {str(e)}")
@@ -2624,6 +2724,29 @@ def customer_transaction():
                     datetime.now().isoformat(),
                     datetime.now().isoformat()
                 ])
+                
+                # Verify user exists before using as created_by
+                cursor.execute("SELECT id FROM users WHERE id = %s", [user_id])
+                user_record = cursor.fetchone()
+                
+                # If user doesn't exist, create it now
+                if not user_record:
+                    print(f"User {user_id} not found, creating user record before transaction")
+                    cursor.execute("""
+                        INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    """, [
+                        user_id,
+                        session.get('user_name', f"User {user_id[-8:]}"),
+                        session.get('phone_number', f"0000{user_id[-8:]}"),
+                        'customer',
+                        'temporary_' + str(int(datetime.now().timestamp())),
+                        datetime.now().isoformat()
+                    ])
+                    user_record = cursor.fetchone()
+                    conn.commit()
+                    print(f"Created user record with ID {user_id}")
                 
                 # Insert transaction
                 transaction_id = str(uuid.uuid4())
