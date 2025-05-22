@@ -7,6 +7,9 @@ import time
 import requests  # Add explicit import
 import socket    # Add explicit import
 import threading # Add explicit import
+import psycopg2  # Import PostgreSQL driver
+import psycopg2.extras  # For handling UUID and other types
+from psycopg2.pool import ThreadedConnectionPool  # For connection pooling
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -161,29 +164,106 @@ else:
             # Return a default path that should exist
             return "static/images/placeholder_qr.png"
 
-# Import Supabase first to ensure it's available globally
-try:
-    # Import supabase with proper error handling
-    from supabase import create_client, Client
-    print("Successfully imported Supabase module")
+# PostgreSQL connection pool
+db_pool = None
+
+# Initialize the PostgreSQL connection pool
+def init_db_pool():
+    global db_pool
     
-    # Check if we can import ClientOptions
+    if db_pool is not None:
+        return
+
+    # Use internal URL first, fallback to external URL if needed
     try:
-        from supabase.lib.client_options import ClientOptions
-        HAS_CLIENT_OPTIONS = True
-    except ImportError:
-        HAS_CLIENT_OPTIONS = False
-        print("ClientOptions not available, using simple dict for options")
+        print("Initializing PostgreSQL connection pool...")
+        db_pool = ThreadedConnectionPool(
+            minconn=1,
+            maxconn=10,
+            dsn=DATABASE_URL,  # Use the global DATABASE_URL variable
+            cursor_factory=psycopg2.extras.DictCursor
+        )
+        print("PostgreSQL connection pool initialized successfully with internal URL")
+        return True
+    except Exception as e:
+        print(f"ERROR initializing PostgreSQL connection pool with internal URL: {str(e)}")
+        print("Attempting to connect with external URL...")
+        try:
+            db_pool = ThreadedConnectionPool(
+                minconn=1,
+                maxconn=10,
+                dsn=EXTERNAL_DATABASE_URL,  # Use the global EXTERNAL_DATABASE_URL variable
+                cursor_factory=psycopg2.extras.DictCursor
+            )
+            print("PostgreSQL connection pool initialized successfully with external URL")
+            return True
+        except Exception as e2:
+            print(f"ERROR initializing PostgreSQL connection pool with external URL: {str(e2)}")
+            traceback.print_exc()
+            return None
+
+# Get a connection from the pool with retry
+def get_db_connection():
+    global db_pool
     
-    SUPABASE_AVAILABLE = True
-except ImportError as e:
-    print(f"Supabase module not available, will use mock data only: {str(e)}")
-    SUPABASE_AVAILABLE = False
-    HAS_CLIENT_OPTIONS = False
-except Exception as e:
-    print(f"Error setting up Supabase: {str(e)}")
-    SUPABASE_AVAILABLE = False
-    HAS_CLIENT_OPTIONS = False
+    if db_pool is None:
+        if not init_db_pool():
+            return None
+    
+    for attempt in range(DB_RETRY_ATTEMPTS):
+        try:
+            conn = db_pool.getconn()
+            # Test connection
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            return conn
+        except Exception as e:
+            if attempt < DB_RETRY_ATTEMPTS - 1:
+                print(f"Connection attempt {attempt+1} failed: {str(e)}. Retrying...")
+                time.sleep(DB_RETRY_DELAY)
+            else:
+                print(f"Failed to get database connection after {DB_RETRY_ATTEMPTS} attempts: {str(e)}")
+                return None
+
+# Return a connection to the pool
+def release_db_connection(conn):
+    global db_pool
+    if db_pool is not None and conn is not None:
+        try:
+            db_pool.putconn(conn)
+        except Exception as e:
+            print(f"Error returning connection to pool: {str(e)}")
+
+# Execute database query with connection management
+def execute_query(query, params=None, fetch_one=False, commit=True):
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            print("ERROR: Failed to get database connection")
+            return None
+        
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            
+            if commit:
+                conn.commit()
+                
+            if cursor.description:
+                if fetch_one:
+                    return cursor.fetchone()
+                else:
+                    return cursor.fetchall()
+            return None
+    except Exception as e:
+        print(f"Database query error: {str(e)}")
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # Load environment variables
 load_dotenv()
@@ -202,23 +282,16 @@ print(f"DEBUG INFO: Testing mode: {app.testing}")
 print(f"DEBUG INFO: Environment: {os.environ.get('FLASK_ENV', 'production')}")
 print(f"DEBUG INFO: RENDER_DEPLOYMENT: {RENDER_DEPLOYMENT}")
 
-# Environment variables - hardcoded for easy deployment
-os.environ.setdefault('SUPABASE_URL', 'https://ghbmfgomnqmffixfkdyp.supabase.co')
-os.environ.setdefault('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYm1mZ29tbnFtZmZpeGZrZHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNDAxNTcsImV4cCI6MjA2MjcxNjE1N30.Fw750xiDWVPrl6ssr9p6AJTt--8zvnPoboxJiURvsOI') 
-os.environ.setdefault('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYm1mZ29tbnFtZmZpeGZrZHlwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzE0MDE1NywiZXhwIjoyMDYyNzE2MTU3fQ.s0lgkOiUaNvJWWG2_LRm0fVoTCgcj1QrNz2Qv0zB0gI')
-os.environ.setdefault('DATABASE_URL', 'postgres://postgres.ghbmfgomnqmffixfkdyp:katha-database-password@aws-0-ap-south-1.pooler.supabase.com:5432/postgres')
+# Environment variables - hardcoded for easy deployment with Render PostgreSQL
+# Internal URL (for use within Render's network):
+DATABASE_URL = 'postgresql://kathape_user:IVClGfm9MjHpORJFRuI9JuCQ0efZn8Fc@dpg-d0nf3q1r0fns738vf3q0-a/kathape'
+# External URL (for use outside Render's network):
+EXTERNAL_DATABASE_URL = 'postgresql://kathape_user:IVClGfm9MjHpORJFRuI9JuCQ0efZn8Fc@dpg-d0nf3q1r0fns738vf3q0-a.singapore-postgres.render.com/kathape'
+
+# Set environment variables from hardcoded values
+os.environ['DATABASE_URL'] = DATABASE_URL
 os.environ.setdefault('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
 os.environ.setdefault('UPLOAD_FOLDER', 'static/uploads')
-
-# Try to import and apply DNS patches for Supabase connectivity
-try:
-    import patches
-    patches.apply_patches()
-    print("Applied DNS resolution patches for Supabase")
-except ImportError:
-    print("DNS patches module not found, continuing without DNS patches")
-except Exception as e:
-    print(f"Error applying DNS patches: {str(e)}")
 
 # Create folder structure
 upload_folder = os.getenv('UPLOAD_FOLDER', 'static/uploads')
@@ -231,6 +304,9 @@ os.makedirs('static/images', exist_ok=True)
 app.config['UPLOAD_FOLDER'] = upload_folder
 app.config['QR_CODES_FOLDER'] = qr_folder
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+
+# Initialize database
+init_db_pool()
 
 # Supabase clients
 supabase_client = None
@@ -405,45 +481,48 @@ def allowed_file(filename):
 # Safe query wrapper for Supabase - direct implementation to avoid imported function issues
 def query_table(table_name, query_type='select', fields='*', filters=None, data=None, limit=None):
     """
-    Safely query a Supabase table with proper error handling
+    Safely query a PostgreSQL table with proper error handling
     """
-    # Create an empty response class to use as fallback when Supabase is unavailable
-    class EmptyResponse:
-        def __init__(self):
-            self.data = []
-    
     try:
-        # Get Supabase client
-        client = get_supabase_client()
-        
-        if not client:
-            print(f"No Supabase client available for {table_name}")
-            return EmptyResponse()
-        
         # Handle different query types
         if query_type == 'select':
-            query = client.table(table_name).select(fields)
+            # Build SELECT query
+            query = f"SELECT {fields} FROM {table_name}"
+            params = []
             
             # Apply filters
             if filters:
+                where_conditions = []
                 for field, op, value in filters:
                     if field.endswith('_id') and value:
                         value = safe_uuid(value)
                         
                     if op == 'eq':
-                        query = query.eq(field, value)
+                        where_conditions.append(f"{field} = %s")
+                        params.append(value)
                     elif op == 'neq':
-                        query = query.neq(field, value)
+                        where_conditions.append(f"{field} != %s")
+                        params.append(value)
                     # Add other operators as needed
+                
+                if where_conditions:
+                    query += " WHERE " + " AND ".join(where_conditions)
             
             # Apply query limit based on environment
             if limit:
-                query = query.limit(limit)
+                query += f" LIMIT {limit}"
             elif RENDER_DEPLOYMENT:
-                query = query.limit(RENDER_QUERY_LIMIT)
+                query += f" LIMIT {RENDER_QUERY_LIMIT}"
                 
-            result = query.execute()
-            return result
+            # Execute query
+            rows = execute_query(query, params)
+            
+            # Create a response class to match Supabase's structure
+            class Response:
+                def __init__(self, data):
+                    self.data = data or []
+            
+            return Response(rows)
         
         elif query_type == 'insert':
             # Ensure UUID fields are valid
@@ -451,49 +530,123 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
                 for key, value in data.items():
                     if key == 'id' or key.endswith('_id'):
                         data[key] = safe_uuid(value)
-                        
-            result = client.table(table_name).insert(data).execute()
-            return result
+            
+            if not data:
+                return None
+                
+            # Build INSERT query
+            columns = list(data.keys())
+            placeholders = ["%s"] * len(columns)
+            values = [data[col] for col in columns]
+            
+            query = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(placeholders)}) RETURNING *"
+            
+            # Execute query
+            result = execute_query(query, values, commit=True)
+            
+            # Create a response class to match Supabase's structure
+            class Response:
+                def __init__(self, data):
+                    self.data = data or []
+            
+            return Response(result)
             
         elif query_type == 'update':
-            query = client.table(table_name).update(data)
+            # Build UPDATE query
+            if not data:
+                return None
+                
+            set_parts = []
+            values = []
+            
+            for key, value in data.items():
+                if key == 'id' or key.endswith('_id'):
+                    value = safe_uuid(value)
+                
+                set_parts.append(f"{key} = %s")
+                values.append(value)
+            
+            query = f"UPDATE {table_name} SET {', '.join(set_parts)}"
             
             # Apply filters
             if filters:
+                where_conditions = []
                 for field, op, value in filters:
                     if field.endswith('_id'):
                         value = safe_uuid(value)
                         
                     if op == 'eq':
-                        query = query.eq(field, value)
+                        where_conditions.append(f"{field} = %s")
+                        values.append(value)
                     # Add other operators as needed
+                
+                if where_conditions:
+                    query += " WHERE " + " AND ".join(where_conditions)
             
-            result = query.execute()
-            return result
+            query += " RETURNING *"
+            
+            # Execute query
+            result = execute_query(query, values, commit=True)
+            
+            # Create a response class to match Supabase's structure
+            class Response:
+                def __init__(self, data):
+                    self.data = data or []
+            
+            return Response(result)
             
         elif query_type == 'delete':
-            query = client.table(table_name).delete()
+            # Build DELETE query
+            query = f"DELETE FROM {table_name}"
+            params = []
             
             # Apply filters
             if filters:
+                where_conditions = []
                 for field, op, value in filters:
                     if field.endswith('_id'):
                         value = safe_uuid(value)
                         
                     if op == 'eq':
-                        query = query.eq(field, value)
+                        where_conditions.append(f"{field} = %s")
+                        params.append(value)
                     # Add other operators as needed
+                
+                if where_conditions:
+                    query += " WHERE " + " AND ".join(where_conditions)
             
-            result = query.execute()
-            return result
+            query += " RETURNING *"
+            
+            # Execute query
+            result = execute_query(query, params, commit=True)
+            
+            # Create a response class to match Supabase's structure
+            class Response:
+                def __init__(self, data):
+                    self.data = data or []
+            
+            return Response(result)
             
         else:
             print(f"ERROR: Invalid query type: {query_type}")
-            return EmptyResponse()
+            
+            # Create an empty response class to use as fallback
+            class Response:
+                def __init__(self):
+                    self.data = []
+            
+            return Response()
         
     except Exception as e:
-        print(f"Supabase query error: {str(e)}")
-        return EmptyResponse()
+        print(f"Database query error: {str(e)}")
+        traceback.print_exc()
+        
+        # Create an empty response class to use as fallback
+        class Response:
+            def __init__(self):
+                self.data = []
+        
+        return Response()
 
 # Timeout-aware database query function
 def timeout_query(func, *args, **kwargs):
@@ -702,42 +855,78 @@ def register():
             return render_template('register.html')
         
         try:
-            # Get admin database connection for auth operations
-            supabase = get_supabase_admin_client()
-            
-            if not supabase:
-                flash('Registration failed: Database connection error', 'error')
-                return render_template('register.html')
-            
             # Check if phone number already exists
-            existing_user = supabase.table('users').select('id').eq('phone_number', phone).execute()
-            if existing_user.data:
+            check_query = "SELECT id FROM users WHERE phone_number = %s"
+            existing_user = execute_query(check_query, [phone], fetch_one=True)
+            
+            if existing_user:
                 flash('Phone number already registered', 'error')
                 return render_template('register.html')
             
             # Create user ID
             user_id = str(uuid.uuid4())
             
-            # Prepare user data
-            user_data = {
-                'id': user_id,
-                'name': name,
-                'phone_number': phone,
-                'user_type': user_type,
-                'password': password,  # Using simplified password field
-                'created_at': datetime.now().isoformat()
-            }
+            # Create user record
+            user_query = """
+                INSERT INTO users (id, name, phone_number, user_type, password, created_at) 
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """
+            user_params = [
+                user_id,
+                name,
+                phone,
+                user_type,
+                password,
+                datetime.now().isoformat()
+            ]
             
-            # Insert user directly using admin client
-            user_response = supabase.table('users').insert(user_data).execute()
+            user_result = execute_query(user_query, user_params, fetch_one=True)
             
-            if not user_response or not user_response.data:
+            if not user_result:
                 flash('Registration failed: Database error', 'error')
                 return render_template('register.html')
             
             print(f"DEBUG: User created with ID {user_id}")
             
-            # The triggers we created in SQL will automatically create the profile records
+            # Create profile record (business or customer)
+            if user_type == 'business':
+                # Create business record
+                business_id = str(uuid.uuid4())
+                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                
+                business_query = """
+                    INSERT INTO businesses (id, user_id, name, description, access_pin, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                business_params = [
+                    business_id,
+                    user_id,
+                    f"{name}'s Business",
+                    'My business account',
+                    access_pin,
+                    datetime.now().isoformat()
+                ]
+                
+                execute_query(business_query, business_params)
+            else:
+                # Create customer record
+                customer_id = str(uuid.uuid4())
+                
+                customer_query = """
+                    INSERT INTO customers (id, user_id, name, phone_number, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                customer_params = [
+                    customer_id,
+                    user_id,
+                    name,
+                    phone,
+                    datetime.now().isoformat()
+                ]
+                
+                execute_query(customer_query, customer_params)
+            
             flash('Registration successful! Please login.', 'success')
             return redirect(url_for('login'))
             
@@ -796,27 +985,19 @@ def login():
                     logger.info(f"Redirecting customer to dashboard (emergency mode)")
                     return redirect(url_for('customer_dashboard'))
             
-            # First try a quick connectivity check to Supabase with a short timeout
+            # First try a quick connectivity check to database with a short timeout
             try:
-                logger.info("Testing quick connection to Supabase")
-                client = None
+                logger.info("Testing quick connection to database")
                 
-                # Use socket with a short timeout for quick connection test
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(5.0)  # 5 second timeout for connectivity check
-                
-                # Parse the Supabase URL to get the host
-                supabase_url = os.environ.get('SUPABASE_URL', 'https://ghbmfgomnqmffixfkdyp.supabase.co')
-                host = supabase_url.replace('https://', '').replace('http://', '').split('/')[0]
-                
+                # Try direct connection to database instead of socket test
                 try:
-                    logger.info(f"Connecting to {host}:443")
-                    sock.connect((host, 443))
-                    logger.info("Connection successful")
-                    sock.close()
-                    
-                    # Initialize the Supabase client only after confirming connectivity
-                    client = get_supabase_client()
+                    logger.info("Testing direct database connection")
+                    conn = psycopg2.connect(
+                        EXTERNAL_DATABASE_URL,
+                        connect_timeout=5  # 5 second timeout
+                    )
+                    logger.info("Database connection successful")
+                    conn.close()
                 except Exception as connect_error:
                     logger.error(f"Connection test failed: {str(connect_error)}")
                     # If we can't connect quickly, use session fallback data
@@ -827,18 +1008,9 @@ def login():
                     else:
                         return redirect(url_for('customer_dashboard'))
             
-                if not client:
-                    logger.error("Failed to create Supabase client")
-                    flash('Login successful with offline mode.', 'success')
-                    
-                    if user_type == 'business':
-                        return redirect(url_for('business_dashboard'))
-                    else:
-                        return redirect(url_for('customer_dashboard'))
-                
-                # We have a client and connection is confirmed - now try a quick query
+                # We have confirmed connectivity - now try a quick query
                 try:
-                    logger.info("Executing Supabase query with short timeout")
+                    logger.info("Executing database query with short timeout")
                     start_time = time.time()
                     
                     # Use a separate thread with limited time
@@ -848,10 +1020,15 @@ def login():
                     
                     def run_query():
                         try:
-                            # Simple minimal query
-                            result = client.table('users').select('id,name,password').eq('phone_number', phone).limit(1).execute()
-                            query_result[0] = result
-                            query_completed[0] = True
+                            # Connect directly to the database
+                            conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+                            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                                # Query to check user credentials
+                                cursor.execute("SELECT id, name, password FROM users WHERE phone_number = %s LIMIT 1", [phone])
+                                user_data = cursor.fetchone()
+                                query_result[0] = user_data
+                                query_completed[0] = True
+                            conn.close()
                         except Exception as e:
                             query_error[0] = e
                             query_completed[0] = True
@@ -883,14 +1060,13 @@ def login():
                             return redirect(url_for('customer_dashboard'))
                     
                     # We got a successful query result
-                    user_response = query_result[0]
+                    user = query_result[0]
                     elapsed_time = time.time() - start_time
                     logger.info(f"Query completed in {elapsed_time:.2f} seconds")
                     
-                    if not user_response or not user_response.data:
+                    if not user:
                         flash('Login successful as new user.', 'success')
                     else:
-                        user = user_response.data[0]
                         user_id = user['id']
                         session['user_id'] = user_id
                         session['user_name'] = user.get('name', user_name)
@@ -901,10 +1077,59 @@ def login():
                         else:
                             flash('Login successful!', 'success')
                     
+                    # Fetch appropriate profile ID (business or customer)
                     if user_type == 'business':
+                        try:
+                            # Get business ID directly from database
+                            conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+                            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                                # Get business ID
+                                cursor.execute("SELECT id, name, access_pin FROM businesses WHERE user_id = %s LIMIT 1", [user_id])
+                                business = cursor.fetchone()
+                                
+                                if business:
+                                    session['business_id'] = business['id']
+                                    session['business_name'] = business['name']
+                                    session['access_pin'] = business['access_pin']
+                                else:
+                                    # Create fallback business data
+                                    business_id = str(uuid.uuid4())
+                                    session['business_id'] = business_id
+                                    session['business_name'] = f"{session['user_name']}'s Business"
+                                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                            conn.close()
+                        except Exception as e:
+                            logger.error(f"Error fetching business data: {str(e)}")
+                            # Create fallback business data
+                            business_id = str(uuid.uuid4())
+                            session['business_id'] = business_id
+                            session['business_name'] = f"{session['user_name']}'s Business"
+                            session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                        
                         logger.info(f"Redirecting to business dashboard")
                         return redirect(url_for('business_dashboard'))
                     else:
+                        try:
+                            # Get customer ID directly from database
+                            conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+                            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                                # Get customer ID
+                                cursor.execute("SELECT id FROM customers WHERE user_id = %s LIMIT 1", [user_id])
+                                customer = cursor.fetchone()
+                                
+                                if customer:
+                                    session['customer_id'] = customer['id']
+                                else:
+                                    # Create fallback customer data
+                                    customer_id = str(uuid.uuid4())
+                                    session['customer_id'] = customer_id
+                            conn.close()
+                        except Exception as e:
+                            logger.error(f"Error fetching customer data: {str(e)}")
+                            # Create fallback customer data
+                            customer_id = str(uuid.uuid4())
+                            session['customer_id'] = customer_id
+                        
                         logger.info(f"Redirecting to customer dashboard")
                         return redirect(url_for('customer_dashboard'))
                         
@@ -1860,83 +2085,141 @@ def customer_dashboard():
         if 'customer_id' not in session:
             try:
                 logger.info("Customer ID not found in session - attempting to retrieve or create")
-                # In emergency mode, we'll just use a temp ID rather than querying
-                emergency_id = str(uuid.uuid4())
-                session['customer_id'] = emergency_id
-                session['customer_name'] = session.get('user_name', 'Customer')
-                logger.info(f"Created temporary customer ID: {emergency_id}")
+                # Try to get customer ID from database
+                try:
+                    conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+                    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                        cursor.execute("SELECT id FROM customers WHERE user_id = %s", [user_id])
+                        customer = cursor.fetchone()
+                        
+                        if customer:
+                            session['customer_id'] = customer['id']
+                            logger.info(f"Found customer ID in database: {customer['id']}")
+                        else:
+                            # Create a new customer record
+                            customer_id = str(uuid.uuid4())
+                            cursor.execute("""
+                                INSERT INTO customers (id, user_id, name, phone_number, created_at)
+                                VALUES (%s, %s, %s, %s, %s)
+                                RETURNING id
+                            """, [
+                                customer_id,
+                                user_id,
+                                session.get('user_name', 'Customer'),
+                                session.get('phone_number', f"0000{customer_id[-8:]}"),
+                                datetime.now().isoformat()
+                            ])
+                            new_customer = cursor.fetchone()
+                            session['customer_id'] = new_customer['id']
+                            logger.info(f"Created new customer ID: {new_customer['id']}")
+                            conn.commit()
+                    conn.close()
+                except Exception as db_error:
+                    logger.error(f"Database error creating customer: {str(db_error)}")
+                    # In emergency mode, we'll just use a temp ID rather than querying
+                    emergency_id = str(uuid.uuid4())
+                    session['customer_id'] = emergency_id
+                    session['customer_name'] = session.get('user_name', 'Customer')
+                    logger.info(f"Created temporary customer ID: {emergency_id}")
             except Exception as e:
                 logger.error(f"Error creating customer ID: {str(e)}")
                 # Still ensure the customer has *some* ID to proceed
                 session['customer_id'] = str(uuid.uuid4())
         
-        # On Render, we'll use extremely minimal data to avoid timeouts
-        if RENDER_DEPLOYMENT:
-            # Create a static default business that won't require any DB queries
-            default_business = {
-                'id': 'default',
+        customer_id = safe_uuid(session.get('customer_id'))
+        
+        # Get businesses with direct database access
+        businesses = []
+        try:
+            conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Get customer credits
+                cursor.execute(
+                    "SELECT business_id, current_balance FROM customer_credits WHERE customer_id = %s LIMIT 5",
+                    [customer_id]
+                )
+                credits = cursor.fetchall()
+                
+                # Get business details for each credit
+                for i, credit in enumerate(credits):
+                    business_id = credit['business_id']
+                    cursor.execute(
+                        "SELECT id, name FROM businesses WHERE id = %s",
+                        [business_id]
+                    )
+                    business = cursor.fetchone()
+                    
+                    if business:
+                        businesses.append({
+                            'id': business['id'],
+                            'name': business['name'],
+                            'current_balance': credit['current_balance']
+                        })
+                    else:
+                        # Create business if it doesn't exist (shouldn't happen normally)
+                        business_user_id = str(uuid.uuid4())
+                        cursor.execute("""
+                            INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            RETURNING id
+                        """, [
+                            business_user_id,
+                            f"Business {i+1}",
+                            f"0000{business_id[-8:] if len(business_id) >= 8 else '0000'}",
+                            'business',
+                            'temporary_' + str(int(datetime.now().timestamp())),
+                            datetime.now().isoformat()
+                        ])
+                        
+                        cursor.execute("""
+                            INSERT INTO businesses (id, user_id, name, description, access_pin, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            RETURNING id, name
+                        """, [
+                            business_id,
+                            business_user_id,
+                            f"Business {i+1}",
+                            'Auto-created business',
+                            f"{int(datetime.now().timestamp()) % 10000:04d}",
+                            datetime.now().isoformat()
+                        ])
+                        new_business = cursor.fetchone()
+                        conn.commit()
+                        
+                        businesses.append({
+                            'id': new_business['id'],
+                            'name': new_business['name'],
+                            'current_balance': credit['current_balance']
+                        })
+            conn.close()
+        except Exception as db_error:
+            logger.error(f"Database error in customer dashboard: {str(db_error)}")
+            # Add a default business in case of error
+            default_business_id = str(uuid.uuid4())
+            session['default_business_id'] = default_business_id
+            businesses.append({
+                'id': default_business_id,
                 'name': 'Your Business Credits',
                 'current_balance': 0
-            }
-            
-            # Send very minimal data to the template
-            businesses = [default_business]
-            
-            # Log performance
-            duration = time.time() - start_time
-            logger.info(f"RENDER: Customer dashboard loaded with minimal data in {duration:.2f}s")
-            
-            return render_template('customer/dashboard.html', businesses=businesses)
-        else:
-            # In development, we can load more data
-            try:
-                customer_id = safe_uuid(session.get('customer_id'))
-                
-                # Get businesses with limited DB interaction
-                businesses_response = query_table(
-                    'customer_credits', 
-                    fields='business_id,current_balance', 
-                    filters=[('customer_id', 'eq', customer_id)],
-                    limit=5
-                )
-                
-                businesses = []
-                if businesses_response and businesses_response.data:
-                    for i, credit in enumerate(businesses_response.data):
-                        business_id = credit.get('business_id')
-                        businesses.append({
-                            'id': business_id,
-                            'name': f'Business {i+1}',
-                            'current_balance': credit.get('current_balance', 0)
-                        })
-                
-                # Add default business if none found
-                if not businesses:
-                    businesses.append({
-                        'id': 'default',
-                        'name': 'Your Business Credits',
-                        'current_balance': 0
-                    })
-                
-                # Log performance
-                duration = time.time() - start_time
-                logger.info(f"DEV: Customer dashboard loaded in {duration:.2f}s")
-                
-                return render_template('customer/dashboard.html', businesses=businesses)
-            except Exception as e:
-                logger.error(f"Error in customer dashboard: {str(e)}")
-                traceback.print_exc()
-                
-                # Add default business in error case
-                businesses = [{
-                    'id': 'default-error',
-                    'name': 'Your Business Credits',
-                    'current_balance': 0
-                }]
-                
-                return render_template('customer/dashboard.html', businesses=businesses)
-    except Exception as e:
-        logger.critical(f"CRITICAL ERROR in customer dashboard: {str(e)}")
+            })
+        
+        # Add default business if none found
+        if not businesses:
+            default_business_id = str(uuid.uuid4())
+            session['default_business_id'] = default_business_id
+            businesses.append({
+                'id': default_business_id,
+                'name': 'Your Business Credits',
+                'current_balance': 0
+            })
+        
+        # Log performance
+        duration = time.time() - start_time
+        logger.info(f"Customer dashboard loaded in {duration:.2f}s")
+        
+        return render_template('customer/dashboard.html', businesses=businesses)
+    except Exception as outer_e:
+        logger.critical(f"CRITICAL ERROR in customer dashboard: {str(outer_e)}")
         traceback.print_exc()
         
         # Return a minimal fallback in case of catastrophic error
@@ -2033,59 +2316,210 @@ def customer_business_view():
     business_id = safe_uuid(session.get('selected_business_id'))
     customer_id = safe_uuid(session.get('customer_id'))
     
-    # Ensure credit relationship exists - this will create it if it doesn't
-    credit = ensure_customer_credit_exists(business_id, customer_id)
-    
-    # Get business details
-    business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
-    business = business_response.data[0] if business_response and business_response.data else {}
-    
-    # Get customer details
-    customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
-    customer = customer_response.data[0] if customer_response and customer_response.data else {}
-    
-    # Merge customer details with credit information
-    current_balance = credit.get('current_balance', 0) if credit else 0
-    if customer:
-        customer = {**customer, 'current_balance': current_balance}
-    
-    # Get transaction history for this customer with this business
-    transactions = []
-    credit_total = 0
-    payment_total = 0
-    
     try:
-        transactions_response = query_table('transactions',
-                                           filters=[('business_id', 'eq', business_id),
-                                                   ('customer_id', 'eq', customer_id)])
-        transactions = transactions_response.data if transactions_response and transactions_response.data else []
+        # Connect directly to database
+        conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            # Check if business exists
+            cursor.execute("SELECT id, name, profile_photo_url FROM businesses WHERE id = %s", [business_id])
+            business = cursor.fetchone()
+            
+            if not business:
+                # Create business record if it doesn't exist
+                print(f"Business {business_id} not found, creating business record")
+                
+                # First create a user for the business
+                business_user_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, [
+                    business_user_id,
+                    f"Business {business_id[-8:]}",
+                    f"0000{business_id[-8:]}",
+                    'business',
+                    'temporary_' + str(int(datetime.now().timestamp())),
+                    datetime.now().isoformat()
+                ])
+                
+                # Then create the business record
+                cursor.execute("""
+                    INSERT INTO businesses (id, user_id, name, description, access_pin, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, name, profile_photo_url
+                """, [
+                    business_id,
+                    business_user_id,
+                    f"Business {business_id[-8:]}",
+                    'Auto-created business',
+                    f"{int(datetime.now().timestamp()) % 10000:04d}",
+                    datetime.now().isoformat()
+                ])
+                business = cursor.fetchone()
+                print(f"Created business record with ID {business_id}")
+            
+            # Check if customer exists
+            cursor.execute("SELECT id, name FROM customers WHERE id = %s", [customer_id])
+            customer = cursor.fetchone()
+            
+            if not customer:
+                # Create customer record if it doesn't exist
+                print(f"Customer {customer_id} not found, creating customer record")
+                
+                # Create user for customer
+                customer_user_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, [
+                    customer_user_id,
+                    f"Customer {customer_id[-8:]}",
+                    f"0000{customer_id[-8:]}",
+                    'customer',
+                    'temporary_' + str(int(datetime.now().timestamp())),
+                    datetime.now().isoformat()
+                ])
+                
+                # Create customer record
+                cursor.execute("""
+                    INSERT INTO customers (id, user_id, name, phone_number, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id, name
+                """, [
+                    customer_id,
+                    customer_user_id,
+                    f"Customer {customer_id[-8:]}",
+                    f"0000{customer_id[-8:]}",
+                    datetime.now().isoformat()
+                ])
+                customer = cursor.fetchone()
+                print(f"Created customer record with ID {customer_id}")
+            
+            # Ensure credit relationship exists
+            cursor.execute("""
+                SELECT * FROM customer_credits 
+                WHERE business_id = %s AND customer_id = %s
+            """, [business_id, customer_id])
+            credit = cursor.fetchone()
+            
+            if not credit:
+                # Create credit relationship
+                credit_id = str(uuid.uuid4())
+                now = datetime.now().isoformat()
+                cursor.execute("""
+                    INSERT INTO customer_credits (id, business_id, customer_id, current_balance, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                """, [
+                    credit_id,
+                    business_id,
+                    customer_id,
+                    0,
+                    now,
+                    now
+                ])
+                credit = cursor.fetchone()
+                print(f"Created credit relationship between business {business_id} and customer {customer_id}")
+            
+            # Get transaction history
+            cursor.execute("""
+                SELECT * FROM transactions
+                WHERE business_id = %s AND customer_id = %s
+                ORDER BY created_at DESC
+            """, [business_id, customer_id])
+            transactions = cursor.fetchall()
+            
+            # Debug log to see transactions
+            print(f"Found {len(transactions)} transactions for business {business_id} and customer {customer_id}")
+            for tx in transactions:
+                print(f"Transaction: type={tx['transaction_type']}, amount={tx['amount']}, date={tx['created_at']}")
+            
+            # Calculate totals for display purposes only
+            credit_total = 0
+            payment_total = 0
+            
+            for transaction in transactions:
+                if transaction['transaction_type'] == 'credit':
+                    credit_total += float(transaction['amount'])
+                    print(f"Credit transaction: +{float(transaction['amount'])}, running credit total: {credit_total}")
+                else:  # payment
+                    payment_total += float(transaction['amount'])
+                    print(f"Payment transaction: +{float(transaction['amount'])}, running payment total: {payment_total}")
+            
+            # Debug log for totals
+            print(f"Final Credit total: {credit_total}, Payment total: {payment_total}")
+            
+            # Get the current balance directly from the database
+            # This is maintained by the database trigger and is more reliable
+            cursor.execute("""
+                SELECT current_balance FROM customer_credits
+                WHERE business_id = %s AND customer_id = %s
+            """, [business_id, customer_id])
+            balance_result = cursor.fetchone()
+            current_balance = float(balance_result['current_balance']) if balance_result else 0
+            
+            print(f"Database current balance: {current_balance}")
+            print(f"Credit total: {credit_total}, Payment total: {payment_total}")
+            print(f"Expected balance (credit - payment): {credit_total - payment_total}")
+            
+            # If the balance is significantly different from what we expect, log a warning
+            expected_balance = credit_total - payment_total
+            if abs(current_balance - expected_balance) > 0.01:  # Allow for small floating point differences
+                print(f"WARNING: Database balance {current_balance} differs from expected balance {expected_balance}")
+            
+            # Add current balance to customer data
+            customer = dict(customer)
+            customer['current_balance'] = current_balance
+            
+            conn.commit()
+        conn.close()
         
-        # Calculate totals and sort transactions by date, newest first
-        for transaction in transactions:
-            if transaction.get('transaction_type') == 'credit':
-                credit_total += float(transaction.get('amount', 0))
-            else:  # payment
-                payment_total += float(transaction.get('amount', 0))
-        
-        # Sort transactions by date, newest first
-        transactions.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-    except Exception as e:
-        print(f"ERROR retrieving transactions: {str(e)}")
+        return render_template('customer/business_view.html', 
+                            business=business, 
+                            customer=customer,
+                            transactions=transactions,
+                            credit_total=credit_total,
+                            payment_total=payment_total,
+                            current_balance=current_balance)
     
-    return render_template('customer/business_view.html', 
-                          business=business, 
-                          customer=customer,
-                          transactions=transactions,
-                          credit_total=credit_total,
-                          payment_total=payment_total,
-                          current_balance=current_balance)
+    except Exception as e:
+        print(f"Error in customer_business_view: {str(e)}")
+        traceback.print_exc()
+        
+        # Create minimal data for the template
+        mock_business = {
+            'id': business_id,
+            'name': 'Business',
+            'profile_photo_url': None
+        }
+        
+        mock_customer = {
+            'id': customer_id,
+            'name': 'Customer',
+            'current_balance': 0
+        }
+        
+        return render_template('customer/business_view.html',
+                            business=mock_business,
+                            customer=mock_customer,
+                            transactions=[],
+                            credit_total=0,
+                            payment_total=0,
+                            current_balance=0)
 
 @app.route('/customer/transaction', methods=['GET', 'POST'])
 @login_required
 @customer_required
 def customer_transaction():
     if 'selected_business_id' not in session:
-        return redirect(url_for('select_business'))
+        # Get business_id from query parameter if available
+        business_id = request.args.get('business_id')
+        if business_id:
+            session['selected_business_id'] = business_id
+        else:
+            return redirect(url_for('select_business'))
     
     business_id = safe_uuid(session.get('selected_business_id'))
     customer_id = safe_uuid(session.get('customer_id'))
@@ -2093,6 +2527,68 @@ def customer_transaction():
     
     # Get transaction type from query parameter
     default_transaction_type = request.args.get('transaction_type', 'payment')
+    
+    # Ensure business exists in the database
+    try:
+        conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            # Check if business exists
+            cursor.execute("SELECT id FROM businesses WHERE id = %s", [business_id])
+            business = cursor.fetchone()
+            
+            if not business:
+                # Create a business record if it doesn't exist
+                print(f"Business {business_id} not found, creating business record")
+                
+                # First create a user for the business
+                business_user_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, [
+                    business_user_id,
+                    f"Business {business_id[-8:]}",
+                    f"0000{business_id[-8:]}",
+                    'business',
+                    'temporary_' + str(int(datetime.now().timestamp())),
+                    datetime.now().isoformat()
+                ])
+                
+                # Then create the business record
+                cursor.execute("""
+                    INSERT INTO businesses (id, user_id, name, description, access_pin, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, name, access_pin
+                """, [
+                    business_id,
+                    business_user_id,
+                    f"Business {business_id[-8:]}",
+                    'Auto-created business',
+                    f"{int(datetime.now().timestamp()) % 10000:04d}",
+                    datetime.now().isoformat()
+                ])
+                business = cursor.fetchone()
+                print(f"Created business record with ID {business_id}")
+                
+                # Create credit relationship
+                cursor.execute("""
+                    INSERT INTO customer_credits (id, business_id, customer_id, current_balance, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (business_id, customer_id) DO NOTHING
+                """, [
+                    str(uuid.uuid4()),
+                    business_id,
+                    customer_id,
+                    0,
+                    datetime.now().isoformat(),
+                    datetime.now().isoformat()
+                ])
+                conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error ensuring business exists: {str(e)}")
+        traceback.print_exc()
     
     if request.method == 'POST':
         amount = request.form.get('amount')
@@ -2123,34 +2619,125 @@ def customer_transaction():
                 file.save(filepath)
                 media_url = f"/static/uploads/{unique_filename}"
         
-        # Use the enhanced transaction function with media support
-        transaction_data = {
-            'id': str(uuid.uuid4()),
-            'business_id': business_id,
-            'customer_id': customer_id,
-            'amount': amount,
-            'transaction_type': transaction_type,
-            'notes': notes,
-            'created_at': datetime.now().isoformat(),
-            'created_by': user_id
-        }
+        try:
+            # Insert transaction directly using psycopg2
+            conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+            with conn.cursor() as cursor:
+                # Insert transaction
+                transaction_id = str(uuid.uuid4())
+                print(f"Creating new transaction: id={transaction_id}, type={transaction_type}, amount={amount}")
+                
+                try:
+                    cursor.execute("""
+                        INSERT INTO transactions 
+                        (id, business_id, customer_id, amount, transaction_type, notes, media_url, created_at, created_by)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                    """, [
+                        transaction_id,
+                        business_id,
+                        customer_id,
+                        amount,
+                        transaction_type,
+                        notes,
+                        media_url,
+                        datetime.now().isoformat(),
+                        user_id
+                    ])
+                    result = cursor.fetchone()
+                    print(f"Transaction created with ID: {result[0] if result else 'unknown'}")
+                    
+                    # Commit the transaction insert immediately to ensure it's saved
+                    conn.commit()
+                    print("Transaction committed to database")
+                    
+                    # Debug: Check if the database trigger updated the balance
+                    cursor.execute("""
+                        SELECT current_balance FROM customer_credits
+                        WHERE business_id = %s AND customer_id = %s
+                    """, [business_id, customer_id])
+                    trigger_result = cursor.fetchone()
+                    trigger_balance = trigger_result[0] if trigger_result else None
+                    print(f"DEBUG: Balance after trigger: {trigger_balance}")
+                    
+                    # Manually update the balance since the trigger is working backwards
+                    # Recalculate the correct balance
+                    cursor.execute("""
+                        SELECT transaction_type, amount 
+                        FROM transactions 
+                        WHERE business_id = %s AND customer_id = %s
+                    """, [business_id, customer_id])
+                    
+                    all_transactions = cursor.fetchall()
+                    
+                    credit_total = 0
+                    payment_total = 0
+                    
+                    for tx in all_transactions:
+                        if tx[0] == 'credit':
+                            credit_total += float(tx[1])
+                        else:  # payment
+                            payment_total += float(tx[1])
+                    
+                    # Calculate correct balance
+                    correct_balance = credit_total - payment_total
+                    print(f"DEBUG: Recalculated balance: {correct_balance}")
+                    
+                    # Update the balance in the database
+                    cursor.execute("""
+                        UPDATE customer_credits
+                        SET current_balance = %s,
+                            updated_at = %s
+                        WHERE business_id = %s AND customer_id = %s
+                    """, [correct_balance, datetime.now().isoformat(), business_id, customer_id])
+                    
+                except Exception as e:
+                    print(f"Error inserting transaction: {str(e)}")
+                    conn.rollback()
+                    flash(f'Error adding transaction: {str(e)}', 'error')
+                    conn.close()
+                    return redirect(url_for('customer_business_view'))
+                
+                # Get the current balance from the database (maintained by trigger)
+                cursor.execute("""
+                    SELECT current_balance FROM customer_credits
+                    WHERE business_id = %s AND customer_id = %s
+                """, [business_id, customer_id])
+                balance_result = cursor.fetchone()
+                current_balance = float(balance_result[0]) if balance_result else 0
+                print(f"Current balance from database: {current_balance}")
+                
+            conn.commit()
+            conn.close()
+            flash('Transaction added successfully', 'success')
+        except Exception as e:
+            print(f"Database query error: {str(e)}")
+            flash(f'Error adding transaction: {str(e)}', 'error')
         
-        if media_url:
-            transaction_data['media_url'] = media_url
+        return redirect(url_for('customer_business_view', business_id=business_id))
+    
+    # GET request handling for transaction form
+    try:
+        # Get business details
+        conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            # Get business details
+            cursor.execute("SELECT id, name, profile_photo_url FROM businesses WHERE id = %s", [business_id])
+            business = cursor.fetchone() or {'id': business_id, 'name': 'Business', 'profile_photo_url': None}
             
-        query_table('transactions', query_type='insert', data=transaction_data)
-        
-        flash('Transaction added successfully', 'success')
-        return redirect(url_for('customer_business_view'))
-    
-    # Get for transaction form
-    # Get business details
-    business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
-    business = business_response.data[0] if business_response and business_response.data else {}
-    
-    # Get customer details
-    customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
-    customer = customer_response.data[0] if customer_response and customer_response.data else {}
+            # Get customer details and credit balance
+            cursor.execute("""
+                SELECT c.*, cc.current_balance 
+                FROM customers c
+                LEFT JOIN customer_credits cc ON c.id = cc.customer_id AND cc.business_id = %s
+                WHERE c.id = %s
+            """, [business_id, customer_id])
+            customer = cursor.fetchone() or {'id': customer_id, 'name': 'Customer', 'current_balance': 0}
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching data for transaction form: {str(e)}")
+        business = {'id': business_id, 'name': 'Business', 'profile_photo_url': None}
+        customer = {'id': customer_id, 'name': 'Customer', 'current_balance': 0}
     
     return render_template('customer/add_transaction.html', 
                           business=business, 
@@ -2278,104 +2865,132 @@ def ensure_customer_credit_exists(business_id, customer_id, initial_balance=0):
     # First check if the customer exists and create if needed
     try:
         # Check if customer exists
-        customer_response = query_table('customers', filters=[('id', 'eq', customer_id)])
+        customer_query = "SELECT id FROM customers WHERE id = %s"
+        customer = execute_query(customer_query, [customer_id], fetch_one=True)
         
-        if not customer_response or not customer_response.data:
+        if not customer:
             # Customer doesn't exist, create a basic record
             print(f"Customer {customer_id} not found, creating default record")
-            customer_data = {
-                'id': customer_id,
-                'user_id': str(uuid.uuid4()),  # Generate a temporary user ID
-                'name': f"Customer {customer_id[-4:]}",
-                'phone_number': f"0000{customer_id[-4:]}",
-                'created_at': datetime.now().isoformat()
-            }
+            temp_user_id = str(uuid.uuid4())
+            
+            # Create user record first
+            user_query = """
+                INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            user_params = [
+                temp_user_id,
+                f"Customer {customer_id[-4:]}",
+                f"0000{customer_id[-4:]}",
+                'customer',
+                'temporary_' + str(int(datetime.now().timestamp())),
+                datetime.now().isoformat()
+            ]
+            execute_query(user_query, user_params)
             
             # Create customer record
-            query_table('customers', query_type='insert', data=customer_data)
+            customer_query = """
+                INSERT INTO customers (id, user_id, name, phone_number, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            customer_params = [
+                customer_id,
+                temp_user_id,
+                f"Customer {customer_id[-4:]}",
+                f"0000{customer_id[-4:]}",
+                datetime.now().isoformat()
+            ]
+            execute_query(customer_query, customer_params)
             print(f"Created customer record with ID {customer_id}")
-            
-            # Now also check if we need to create a user record
-            user_response = query_table('users', filters=[('id', 'eq', customer_data['user_id'])])
-            if not user_response or not user_response.data:
-                # Create a basic user record
-                user_data = {
-                    'id': customer_data['user_id'],
-                    'name': customer_data['name'],
-                    'phone_number': customer_data['phone_number'],
-                    'user_type': 'customer',
-                    'password': 'temporary_' + str(int(datetime.now().timestamp())),
-                    'created_at': datetime.now().isoformat()
-                }
-                query_table('users', query_type='insert', data=user_data)
-                print(f"Created user record with ID {customer_data['user_id']}")
     except Exception as e:
         print(f"Error ensuring customer exists: {str(e)}")
     
     # Check if business exists and create if needed
     try:
-        business_response = query_table('businesses', filters=[('id', 'eq', business_id)])
+        business_query = "SELECT id FROM businesses WHERE id = %s"
+        business = execute_query(business_query, [business_id], fetch_one=True)
         
-        if not business_response or not business_response.data:
+        if not business:
             # Business doesn't exist, create a basic record
             print(f"Business {business_id} not found, creating default record")
             business_user_id = str(uuid.uuid4())
-            business_data = {
-                'id': business_id,
-                'user_id': business_user_id,
-                'name': f"Business {business_id[-4:]}",
-                'description': 'Auto-created business',
-                'access_pin': f"{int(datetime.now().timestamp()) % 10000:04d}",
-                'created_at': datetime.now().isoformat()
-            }
+            
+            # Create user record first
+            user_query = """
+                INSERT INTO users (id, name, phone_number, user_type, password, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            user_params = [
+                business_user_id,
+                f"Business {business_id[-4:]}",
+                f"0000{business_id[-4:]}",
+                'business',
+                'temporary_' + str(int(datetime.now().timestamp())),
+                datetime.now().isoformat()
+            ]
+            execute_query(user_query, user_params)
             
             # Create business record
-            query_table('businesses', query_type='insert', data=business_data)
+            business_query = """
+                INSERT INTO businesses (id, user_id, name, description, access_pin, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            business_params = [
+                business_id,
+                business_user_id,
+                f"Business {business_id[-4:]}",
+                'Auto-created business',
+                f"{int(datetime.now().timestamp()) % 10000:04d}",
+                datetime.now().isoformat()
+            ]
+            execute_query(business_query, business_params)
             print(f"Created business record with ID {business_id}")
-            
-            # Create a user record for the business if needed
-            user_response = query_table('users', filters=[('id', 'eq', business_user_id)])
-            if not user_response or not user_response.data:
-                # Create a basic user record
-                user_data = {
-                    'id': business_user_id,
-                    'name': business_data['name'],
-                    'phone_number': f"0000{business_id[-4:]}",
-                    'user_type': 'business',
-                    'password': 'temporary_' + str(int(datetime.now().timestamp())),
-                    'created_at': datetime.now().isoformat()
-                }
-                query_table('users', query_type='insert', data=user_data)
-                print(f"Created user record with ID {business_user_id}")
     except Exception as e:
         print(f"Error ensuring business exists: {str(e)}")
     
     # Now check if relationship already exists
-    existing_credit = query_table('customer_credits', 
-                                 filters=[('business_id', 'eq', business_id),
-                                         ('customer_id', 'eq', customer_id)])
+    credit_query = """
+        SELECT * FROM customer_credits 
+        WHERE business_id = %s AND customer_id = %s
+    """
+    existing_credit = execute_query(credit_query, [business_id, customer_id], fetch_one=True)
     
     # Return existing credit if found
-    if existing_credit and existing_credit.data:
-        return existing_credit.data[0]
+    if existing_credit:
+        return existing_credit
     
     # Create a new credit relationship
-    credit_data = {
-        'id': str(uuid.uuid4()),
-        'business_id': business_id,
-        'customer_id': customer_id,
-        'current_balance': initial_balance,
-        'created_at': datetime.now().isoformat(),
-        'updated_at': datetime.now().isoformat()
-    }
+    credit_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
     
-    credit_insert = query_table('customer_credits', query_type='insert', data=credit_data)
+    credit_query = """
+        INSERT INTO customer_credits (id, business_id, customer_id, current_balance, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING *
+    """
+    credit_params = [
+        credit_id,
+        business_id,
+        customer_id,
+        initial_balance,
+        now,
+        now
+    ]
     
-    if credit_insert and credit_insert.data:
-        return credit_insert.data[0]
+    new_credit = execute_query(credit_query, credit_params, fetch_one=True)
+    
+    if new_credit:
+        return new_credit
     else:
-        # Return the data even if insert failed (for mock data system)
-        return credit_data
+        # Return a mock object if insert failed
+        return {
+            'id': credit_id,
+            'business_id': business_id,
+            'customer_id': customer_id,
+            'current_balance': initial_balance,
+            'created_at': now,
+            'updated_at': now
+        }
 
 # Add diagnostic endpoint for testing deployment
 @app.route('/api/status')
@@ -2386,14 +3001,16 @@ def api_status():
         result = {"status": "ok", "database": False, "error": None}
         
         try:
-            # Test Supabase connection
-            client = get_supabase_client()
-            if client:
+            # Test PostgreSQL connection
+            conn = get_db_connection()
+            if conn:
                 # Try a simple query
-                response = client.table('users').select('id').limit(1).execute()
-                if response and response.data:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) FROM users")
+                    count = cursor.fetchone()[0]
                     result["database"] = True
-                    result["user_count"] = len(response.data)
+                    result["user_count"] = count
+                release_db_connection(conn)
         except Exception as db_error:
             result["error"] = str(db_error)
             
@@ -2422,6 +3039,228 @@ def heartbeat():
         "timestamp": datetime.now().isoformat(),
         "mode": "emergency" if os.environ.get('RENDER_EMERGENCY_LOGIN', 'false').lower() == 'true' else "normal"
     })
+
+# Add a function to reset customer balance
+def reset_customer_balance(business_id, customer_id):
+    """
+    Reset a customer's balance by recalculating from transaction history.
+    This is useful for fixing any incorrect balances.
+    
+    Args:
+        business_id: UUID of the business
+        customer_id: UUID of the customer
+    
+    Returns:
+        The new balance
+    """
+    try:
+        conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+        with conn.cursor() as cursor:
+            # Get all transactions for this customer and business
+            cursor.execute("""
+                SELECT transaction_type, amount 
+                FROM transactions 
+                WHERE business_id = %s AND customer_id = %s
+            """, [business_id, customer_id])
+            
+            transactions = cursor.fetchall()
+            
+            # Calculate the correct balance
+            credit_total = 0
+            payment_total = 0
+            
+            for tx in transactions:
+                if tx[0] == 'credit':
+                    credit_total += float(tx[1])
+                else:  # payment
+                    payment_total += float(tx[1])
+            
+            # Calculate current balance
+            # Current balance is how much the customer owes (credit - payment)
+            # Positive balance means customer owes business
+            # Negative balance means business owes customer (unusual case)
+            current_balance = credit_total - payment_total
+            
+            # Update the balance in the database
+            cursor.execute("""
+                UPDATE customer_credits
+                SET current_balance = %s,
+                    updated_at = %s
+                WHERE business_id = %s AND customer_id = %s
+            """, [current_balance, datetime.now().isoformat(), business_id, customer_id])
+            
+            conn.commit()
+            return current_balance
+    except Exception as e:
+        print(f"Error resetting customer balance: {str(e)}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/customer/reset_balance')
+@login_required
+@customer_required
+def customer_reset_balance():
+    """Reset a customer's balance to the correct value"""
+    business_id = request.args.get('business_id')
+    if not business_id:
+        flash('Business ID is required', 'error')
+        return redirect(url_for('customer_dashboard'))
+    
+    business_id = safe_uuid(business_id)
+    customer_id = safe_uuid(session.get('customer_id'))
+    
+    new_balance = reset_customer_balance(business_id, customer_id)
+    
+    if new_balance is not None:
+        flash(f'Balance reset successfully. New balance: ₹{new_balance}', 'success')
+    else:
+        flash('Failed to reset balance', 'error')
+    
+    return redirect(url_for('customer_business_view', business_id=business_id))
+
+# Fix the database trigger that's working backwards
+def fix_database_trigger():
+    """
+    Fix the database trigger that's currently working backwards.
+    The trigger should add to the balance for credits and subtract for payments.
+    """
+    try:
+        conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+        with conn.cursor() as cursor:
+            # Drop the existing trigger
+            cursor.execute("DROP TRIGGER IF EXISTS trg_update_balance ON transactions;")
+            
+            # Create a new trigger function with the correct logic
+            cursor.execute("""
+            CREATE OR REPLACE FUNCTION update_credit_balance() RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.transaction_type = 'credit' THEN
+                    -- Credit means customer owes more, so increase balance
+                    UPDATE customer_credits
+                    SET current_balance = current_balance + NEW.amount,
+                        updated_at = NOW()
+                    WHERE business_id = NEW.business_id AND customer_id = NEW.customer_id;
+                ELSIF NEW.transaction_type = 'payment' THEN
+                    -- Payment means customer owes less, so decrease balance
+                    UPDATE customer_credits
+                    SET current_balance = current_balance - NEW.amount,
+                        updated_at = NOW()
+                    WHERE business_id = NEW.business_id AND customer_id = NEW.customer_id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            """)
+            
+            # Create the trigger
+            cursor.execute("""
+            CREATE TRIGGER trg_update_balance
+            AFTER INSERT ON transactions
+            FOR EACH ROW
+            EXECUTE FUNCTION update_credit_balance();
+            """)
+            
+            conn.commit()
+            print("Database trigger fixed successfully")
+            return True
+    except Exception as e:
+        print(f"Error fixing database trigger: {str(e)}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/admin/fix_trigger')
+@login_required
+def admin_fix_trigger():
+    """Fix the database trigger"""
+    success = fix_database_trigger()
+    
+    if success:
+        flash('Database trigger fixed successfully', 'success')
+    else:
+        flash('Failed to fix database trigger', 'error')
+    
+    return redirect(url_for('index'))
+
+# Fix all customer balances in the database
+def fix_all_customer_balances():
+    """
+    Fix all customer balances in the database by recalculating them from transaction history.
+    """
+    try:
+        conn = psycopg2.connect(EXTERNAL_DATABASE_URL)
+        with conn.cursor() as cursor:
+            # Get all customer-business relationships
+            cursor.execute("""
+                SELECT business_id, customer_id
+                FROM customer_credits
+            """)
+            relationships = cursor.fetchall()
+            
+            fixed_count = 0
+            for relationship in relationships:
+                business_id, customer_id = relationship
+                
+                # Get all transactions for this customer and business
+                cursor.execute("""
+                    SELECT transaction_type, amount 
+                    FROM transactions 
+                    WHERE business_id = %s AND customer_id = %s
+                """, [business_id, customer_id])
+                
+                transactions = cursor.fetchall()
+                
+                # Calculate the correct balance
+                credit_total = 0
+                payment_total = 0
+                
+                for tx in transactions:
+                    if tx[0] == 'credit':
+                        credit_total += float(tx[1])
+                    else:  # payment
+                        payment_total += float(tx[1])
+                
+                # Calculate current balance
+                # Current balance is how much the customer owes (credit - payment)
+                # Positive balance means customer owes business
+                # Negative balance means business owes customer (unusual case)
+                current_balance = credit_total - payment_total
+                
+                # Update the balance in the database
+                cursor.execute("""
+                    UPDATE customer_credits
+                    SET current_balance = %s,
+                        updated_at = %s
+                    WHERE business_id = %s AND customer_id = %s
+                """, [current_balance, datetime.now().isoformat(), business_id, customer_id])
+                
+                fixed_count += 1
+            
+            conn.commit()
+            print(f"Fixed {fixed_count} customer balances")
+            return fixed_count
+    except Exception as e:
+        print(f"Error fixing customer balances: {str(e)}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/admin/fix_balances')
+@login_required
+def admin_fix_balances():
+    """Fix all customer balances"""
+    fixed_count = fix_all_customer_balances()
+    
+    if fixed_count > 0:
+        flash(f'Fixed {fixed_count} customer balances', 'success')
+    else:
+        flash('Failed to fix customer balances', 'error')
+    
+    return redirect(url_for('index'))
 
 # Run the application
 if __name__ == '__main__':

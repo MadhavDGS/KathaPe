@@ -5,12 +5,10 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn wsgi:app --timeout 240 --workers 1 --threads 2 --worker-class=gthread --log-level debug
     envVars:
-      - key: SUPABASE_URL
-        value: https://xhczvjwwmrvmcbwjxpxd.supabase.co
-      - key: SUPABASE_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTM3MTQwNTgsImV4cCI6MjAyOTI5MDA1OH0.xnG-kIOiY4xbB3_QnTJtLXvwxU-fkW2RKlJw2WUoRE8
-      - key: SUPABASE_SERVICE_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoY3p2and3bXJ2bWNid2p4cHhkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcxMzcxNDA1OCwiZXhwIjoyMDI5MjkwMDU4fQ.PjOwIuDIx5a_d3u4C7cFDuOQP8NaOXQKQzH2iSXnSEA
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kathape-db
+          property: connectionString
       - key: FLASK_DEBUG
         value: "1"
       - key: RENDER
@@ -32,4 +30,9 @@ services:
       - key: FLASK_APP
         value: "flask_app.py"
       - key: DB_QUERY_TIMEOUT
-        value: "30" 
+        value: "30"
+
+databases:
+  - name: kathape-db
+    databaseName: kathape
+    user: kathape_admin 

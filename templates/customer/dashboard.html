@@ -371,43 +371,42 @@
     <div class="profile-section">
         <div class="profile-image">
             {% if session.get('profile_photo_url') %}
-                <img src="{{ session.get('profile_photo_url') }}" alt="Profile">
+                <img src="{{ session.get('profile_photo_url') }}" alt="{{ session.get('user_name', 'User') }}">
             {% else %}
                 <div class="placeholder">
-                    <i class="fas fa-user"></i>
+                    {{ session.get('user_name', 'U')[0] | upper }}
                 </div>
             {% endif %}
         </div>
         <div class="profile-info">
-            <h2>{{ session.get('user_name') }}</h2>
-            <p class="phone-number"><i class="fas fa-phone-alt"></i> {{ session.get('phone_number') }}</p>
+            <h2>{{ session.get('user_name', 'User') }}</h2>
+            <p class="phone-number">
+                <i class="fas fa-phone"></i> {{ session.get('phone_number', '') }}
+            </p>
         </div>
     </div>
 
     <div class="dashboard-section">
         <div class="section-header">
-            <h3 class="section-title">Your Businesses</h3>
+            <h3 class="section-title">My Businesses</h3>
             <a href="{{ url_for('select_business') }}" class="add-business-btn">
                 <i class="fas fa-plus"></i> Add Business
             </a>
         </div>
-
+        
         <div class="businesses-list">
             {% if businesses %}
                 {% for business in businesses %}
                     <a href="{{ url_for('customer_business_view', business_id=business.id) }}" class="business-card">
                         <div class="business-card-inner">
                             <div class="business-icon">
-                                {% if business.profile_photo_url %}
-                                    <img src="{{ business.profile_photo_url }}" alt="{{ business.name }}">
-                                {% else %}
-                                    <i class="fas fa-store"></i>
-                                {% endif %}
+                                <i class="fas fa-store"></i>
                             </div>
-                            <div class="business-info">
-                                <div class="business-name">{{ business.name|default('Business') }}</div>
-                                <div class="business-balance {% if business.current_balance > 0 %}positive{% endif %}">
-                                    ₹{{ business.current_balance|default(0)|abs }}
+                            <div class="business-details">
+                                <h4 class="business-name">{{ business.name }}</h4>
+                                <div class="business-balance">
+                                    <span class="balance-label">Balance:</span>
+                                    <span class="balance-value">₹{{ business.current_balance }}</span>
                                 </div>
                             </div>
                             <div class="business-arrow">
@@ -419,13 +418,10 @@
             {% else %}
                 <div class="empty-state">
                     <div class="empty-icon">
-                        <i class="fas fa-store"></i>
+                        <i class="fas fa-store-slash"></i>
                     </div>
-                    <p class="empty-message">No business credits yet</p>
-                    <p class="empty-description">Add a business credit by scanning a QR code</p>
-                    <a href="{{ url_for('scan_qr') }}" class="btn-primary">
-                        <i class="fas fa-qrcode"></i> Scan Business QR
-                    </a>
+                    <p class="empty-text">No businesses yet.</p>
+                    <p class="empty-hint">Connect with a business to get started.</p>
                 </div>
             {% endif %}
         </div>
@@ -433,20 +429,22 @@
 
     <div class="dashboard-section">
         <div class="section-header">
-            <h3 class="section-title">Quick Links</h3>
+            <h3 class="section-title">Quick Actions</h3>
         </div>
-        <div class="quick-links">
-            <a href="{{ url_for('scan_qr') }}" class="quick-link-card">
-                <div class="quick-link-icon">
+        
+        <div class="quick-actions">
+            <a href="{{ url_for('scan_qr') }}" class="action-card">
+                <div class="action-icon">
                     <i class="fas fa-qrcode"></i>
                 </div>
-                <div class="quick-link-text">Scan QR Code</div>
+                <div class="action-text">Scan QR Code</div>
             </a>
-            <a href="{{ url_for('customer_profile') }}" class="quick-link-card">
-                <div class="quick-link-icon">
-                    <i class="fas fa-user-cog"></i>
+            
+            <a href="{{ url_for('customer_profile') }}" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-user-edit"></i>
                 </div>
-                <div class="quick-link-text">Edit Profile</div>
+                <div class="action-text">Edit Profile</div>
             </a>
         </div>
     </div>

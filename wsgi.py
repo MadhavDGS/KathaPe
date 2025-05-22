@@ -6,9 +6,11 @@ import os
 import sys
 import traceback
 import logging
+from flask_app import app
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Enable detailed error logging
@@ -106,6 +108,17 @@ try:
     print("WSGI initialization completed successfully")
     logger.info("WSGI initialization completed successfully")
     
+    # Only run database initialization on Render
+    if os.environ.get('RENDER', '').lower() in ('1', 'true'):
+        logger.info("Running on Render, initializing database...")
+        try:
+            from db_init import initialize_database
+            # Database URLs are hardcoded in db_init.py
+            initialize_database()
+            logger.info("Database initialization successful")
+        except Exception as e:
+            logger.error(f"Database initialization error: {str(e)}")
+            logger.info("Continuing with application startup despite database error")
 except Exception as e:
     print(f"CRITICAL ERROR in WSGI initialization: {str(e)}")
     logger.critical(f"CRITICAL ERROR in WSGI initialization: {str(e)}")
@@ -153,6 +166,9 @@ except Exception as e:
         """
         return make_response(error_html, 500)
 
-# This allows direct execution of this file
+# Export the Flask app for Gunicorn
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000))) 
+    # Get port from environment variable for Render compatibility
+    port = int(os.environ.get('PORT', 5003))
+    # Set host to 0.0.0.0 to make it accessible outside the container
+    app.run(debug=False, host='0.0.0.0', port=port) 

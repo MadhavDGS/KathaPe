@@ -11,6 +11,24 @@
     </div>
 
     <div class="balance-summary">
+        <div class="balance-card balance-primary">
+            <div class="balance-icon">
+                <i class="fas fa-wallet"></i>
+            </div>
+            <div class="balance-content">
+                <div class="balance-label">Current Balance</div>
+                <div class="balance-amount">
+                    {% if current_balance > 0 %}
+                        <span class="text-danger">₹{{ current_balance|default(0) }} (You owe)</span>
+                    {% elif current_balance < 0 %}
+                        <span class="text-success">₹{{ current_balance|abs|default(0) }} (You are owed)</span>
+                    {% else %}
+                        <span class="text-success">₹0 (Settled)</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
         <div class="balance-card credit-total">
             <div class="balance-icon">
                 <i class="fas fa-hand-holding-usd"></i>
@@ -20,29 +38,23 @@
                 <div class="balance-amount">₹{{ credit_total|default(0) }}</div>
             </div>
         </div>
-        
-        <div class="balance-card payment-total">
-            <div class="balance-icon">
-                <i class="fas fa-wallet"></i>
-            </div>
-            <div class="balance-content">
-                <div class="balance-label">Current Balance</div>
-                <div class="balance-amount">₹{{ current_balance|default(0)|abs }}</div>
-            </div>
-        </div>
     </div>
 
     <div class="action-buttons">
-        <a href="{{ url_for('customer_transaction', transaction_type='credit') }}" class="btn credit-btn">
+        <a href="{{ url_for('customer_transaction', transaction_type='credit', business_id=business.id) }}" class="btn credit-btn">
             <i class="fas fa-arrow-circle-up"></i> Take credit
         </a>
-        <a href="{{ url_for('customer_transaction', transaction_type='payment') }}" class="btn payment-btn">
+        <a href="{{ url_for('customer_transaction', transaction_type='payment', business_id=business.id) }}" class="btn payment-btn">
             <i class="fas fa-arrow-circle-down"></i> Pay Back
         </a>
     </div>
 
     <div class="section-header">
         <h2 class="history-title">Transaction History</h2>
+        <div class="transaction-summary">
+            <span>Credits: ₹{{ credit_total|default(0) }}</span>
+            <span>Payments: ₹{{ payment_total|default(0) }}</span>
+        </div>
     </div>
 
     <div class="transaction-history">
@@ -57,12 +69,24 @@
                         {% endif %}
                     </div>
                     <div class="transaction-info">
+                        <div class="transaction-type-label">
+                            {% if transaction.get('transaction_type') == 'credit' %}
+                                Credit Taken
+                            {% else %}
+                                Payment Made
+                            {% endif %}
+                        </div>
                         <div class="transaction-amount">
                             ₹{{ transaction.get('amount', 0) }}
                         </div>
                         <div class="transaction-date">
                             {{ transaction.get('created_at', '')|datetime }}
                         </div>
+                        {% if transaction.get('notes') %}
+                        <div class="transaction-notes">
+                            {{ transaction.get('notes') }}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             {% endfor %}
@@ -163,6 +187,15 @@ body {
     font-size: 20px;
 }
 
+.balance-primary {
+    border-left: 4px solid var(--primary-color);
+}
+
+.balance-primary .balance-icon {
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+}
+
 .credit-total {
     border-left: 4px solid var(--credit-color);
 }
@@ -241,6 +274,9 @@ body {
 
 .section-header {
     margin: 30px 0 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .history-title {
@@ -262,6 +298,21 @@ body {
     height: 18px;
     background-color: var(--primary-color);
     border-radius: 2px;
+}
+
+.transaction-summary {
+    display: flex;
+    gap: 15px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.transaction-summary span:first-child {
+    color: var(--credit-color);
+}
+
+.transaction-summary span:last-child {
+    color: var(--payment-color);
 }
 
 .transaction-history {
@@ -330,6 +381,13 @@ body {
     flex: 1;
 }
 
+.transaction-type-label {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
 .transaction-amount {
     font-size: 18px;
     font-weight: 600;
@@ -346,6 +404,11 @@ body {
 }
 
 .transaction-date {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.transaction-notes {
     font-size: 14px;
     color: var(--text-muted);
 }

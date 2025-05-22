@@ -18,7 +18,7 @@
 
 {% block content %}
 <div class="section-actions">
-    <a href="{{ url_for('customer_business_view') }}" class="btn btn-secondary">
+    <a href="{{ url_for('customer_business_view', business_id=business.id) }}" class="btn btn-secondary">
         <i class="fas fa-arrow-left"></i> Back to Business
     </a>
 </div>
@@ -99,7 +99,7 @@
                     Make Payment
                 {% endif %}
             </button>
-            <a href="{{ url_for('customer_business_view') }}" class="btn btn-secondary">Cancel</a>
+            <a href="{{ url_for('customer_business_view', business_id=business.id) }}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
