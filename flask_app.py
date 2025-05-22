@@ -1271,84 +1271,70 @@ def business_dashboard():
     try:
         # Get business details by user_id
         business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
-    except Exception as e:
-        
-        try:
-            # Get business details by user_id
-            business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
+    
+        if business_response and business_response.data:
+            business = business_response.data[0]
+            session['business_id'] = business['id']
+            session['business_name'] = business['name']
             
-            if business_response and business_response.data:
-                business = business_response.data[0]
-                session['business_id'] = business['id']
-                session['business_name'] = business['name']
+            # Only store the access_pin in session if it exists in the database
+            if business.get('access_pin'):
+                session['access_pin'] = business['access_pin']
+        else:
+            # Create a new business record
+            try:
+                supabase_url = os.getenv('SUPABASE_URL')
+                supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
                 
-                # Only store the access_pin in session if it exists in the database
-                if business.get('access_pin'):
-                    session['access_pin'] = business['access_pin']
-            else:
-                # Create a new business record
+                business_id = str(uuid.uuid4())
+                # Generate a new access_pin only when creating a new business
+                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                
+                business_data = {
+                    'id': business_id,
+                    'user_id': user_id,
+                    'name': f"{session['user_name']}'s Business",
+                    'description': 'Auto-created business account',
+                    'access_pin': access_pin,
+                    'created_at': datetime.now().isoformat()
+                }
+                
+                # Insert with service role directly
                 try:
-                    supabase_url = os.getenv('SUPABASE_URL')
-                    supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
-                    
-                    business_id = str(uuid.uuid4())
-                    # Generate a new access_pin only when creating a new business
-                    access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                    
-                    business_data = {
-                        'id': business_id,
-                        'user_id': user_id,
-                        'name': f"{session['user_name']}'s Business",
-                        'description': 'Auto-created business account',
-                        'access_pin': access_pin,
-                        'created_at': datetime.now().isoformat()
-                    }
-                    
-                    # Insert with service role directly
-                    try:
-                        # Try using the query_table helper function
-                        query_table('businesses', query_type='insert', data=business_data)
-                    except Exception as e:
-                        print(f"ERROR inserting business with query_table: {str(e)}")
-                        # Fallback to direct REST API
-                        try:
-                            headers = {
-                                'apikey': supabase_service_key,
-                                'Authorization': f"Bearer {supabase_service_key}",
-                                'Content-Type': 'application/json'
-                            }
-                            
-                            requests.post(
-                                f"{supabase_url}/rest/v1/businesses",
-                                headers=headers,
-                                json=business_data
-                            )
-                        except Exception as e2:
-                            print(f"ERROR inserting business with direct API: {str(e2)}")
-                    
-                    session['business_id'] = business_id
-                    session['business_name'] = business_data['name']
-                    session['access_pin'] = access_pin
-                    
-                    flash('Business profile has been created', 'success')
+                    # Try using the query_table helper function
+                    query_table('businesses', query_type='insert', data=business_data)
                 except Exception as e:
-                    print(f"ERROR creating business: {str(e)}")
-                    # Create a temporary session business to allow user to continue
-                    temp_id = str(uuid.uuid4())
-                    session['business_id'] = temp_id
-                    session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-                    # Only generate a new access_pin if one doesn't exist in session
-                    if 'access_pin' not in session:
-                        session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-        except Exception as e:
-            flash(f'Error retrieving business: {str(e)}', 'error')
-            # Create a temporary session business to allow user to continue
-            temp_id = str(uuid.uuid4())
-            session['business_id'] = temp_id
-            session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-            # Only generate a new access_pin if one doesn't exist in session
-            if 'access_pin' not in session:
-                session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                    print(f"ERROR inserting business with query_table: {str(e)}")
+                    # Fallback to direct REST API
+                    try:
+                        headers = {
+                            'apikey': supabase_service_key,
+                            'Authorization': f"Bearer {supabase_service_key}",
+                            'Content-Type': 'application/json'
+                        }
+                        
+                        requests.post(
+                            f"{supabase_url}/rest/v1/businesses",
+                            headers=headers,
+                            json=business_data
+                        )
+                    except Exception as e2:
+                        print(f"ERROR inserting business with direct API: {str(e2)}")
+                    
+                session['business_id'] = business_id
+                session['business_name'] = business_data['name']
+                session['access_pin'] = access_pin
+                
+                flash('Business profile has been created', 'success')
+            except Exception as e:
+                print(f"ERROR creating business: {str(e)}")
+                # Create a temporary session business to allow user to continue
+                temp_id = str(uuid.uuid4())
+                session['business_id'] = temp_id
+                session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
+                # Only generate a new access_pin if one doesn't exist in session
+                if 'access_pin' not in session:
+                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
         
         business_id = safe_uuid(session.get('business_id'))
         
@@ -1562,7 +1548,26 @@ def business_dashboard():
                                 transactions=transactions,
                                 customers=customers)
         except Exception as e:
-            pass  # Added by fix_flask_app.py
+            # Instead of silent pass, log the error and return a fallback template
+            print(f"ERROR rendering business dashboard: {str(e)}")
+            traceback.print_exc()
+            
+            # Create minimal data for template
+            business = {
+                'id': business_id,
+                'name': session.get('business_name', 'Your Business'),
+                'description': 'Business account',
+                'access_pin': session.get('access_pin', '0000')
+            }
+            summary = {'total_customers': 0, 'total_credit': 0, 'total_payments': 0}
+            
+            # Return template with minimal data
+            return render_template('business/dashboard.html', 
+                              business=business, 
+                              summary=summary, 
+                              transactions=[],
+                              customers=[])
+                              
     except Exception as e:
         flash(f'Error loading dashboard: {str(e)}', 'error')
         return redirect(url_for('login'))
