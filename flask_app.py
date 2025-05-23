@@ -1764,16 +1764,8 @@ def add_customer():
         
         # If initial credit is provided, add the amount and create a transaction
         if initial_credit > 0:
-            # Update the existing credit with new balance
-            current_balance = float(credit.get('current_balance', 0))
-            updated_balance = current_balance + initial_credit
-            
-            credit_update = query_table('customer_credits', 
-                                      query_type='update',
-                                      data={'current_balance': updated_balance, 'updated_at': datetime.now().isoformat()},
-                                      filters=[('id', 'eq', credit['id'])])
-            
             # Add a transaction record for the initial credit
+            # The database trigger will automatically update the balance
             transaction_data = {
                 'id': str(uuid.uuid4()),
                 'business_id': business_id,
@@ -2776,17 +2768,8 @@ def customer_transaction():
                     conn.commit()
                     print("Transaction committed to database")
                     
-                    # Manually update the balance since the trigger might not be working correctly
-                    # Calculate the balance adjustment based on transaction type
-                    balance_adjustment = amount if transaction_type == 'credit' else -amount
-                    
-                    cursor.execute("""
-                        UPDATE customer_credits
-                        SET current_balance = current_balance + %s,
-                            updated_at = %s
-                        WHERE business_id = %s AND customer_id = %s
-                    """, [balance_adjustment, datetime.now().isoformat(), business_id, customer_id])
-                    conn.commit()
+                    # The database trigger will handle updating the balance automatically
+                    # No need for manual balance update which was causing double updates
                     
                     # Verify the balance was updated correctly
                     cursor.execute("""
@@ -3457,4 +3440,45 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5003))
     # Set host to 0.0.0.0 to make it accessible outside the container
     app.run(debug=False, host='0.0.0.0', port=port) 
+
+# Add a route to fix balances without requiring login
+@app.route('/fix/balances/<secret_key>')
+def fix_balances_public(secret_key):
+    """Fix all customer balances without requiring login"""
+    # Simple security check using a secret key
+    expected_key = os.environ.get('EMERGENCY_KEY', 'kathape_emergency_fix')
+    
+    if secret_key != expected_key:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid secret key"
+        })
+    
+    fixed_count = fix_all_customer_balances()
+    
+    return jsonify({
+        "status": "success",
+        "message": f"Fixed {fixed_count} customer balances",
+        "count": fixed_count
+    })
+
+# Add a route to fix the database trigger without requiring login
+@app.route('/fix/trigger/<secret_key>')
+def fix_trigger_public(secret_key):
+    """Fix the database trigger without requiring login"""
+    # Simple security check using a secret key
+    expected_key = os.environ.get('EMERGENCY_KEY', 'kathape_emergency_fix')
+    
+    if secret_key != expected_key:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid secret key"
+        })
+    
+    success = fix_database_trigger()
+    
+    return jsonify({
+        "status": "success" if success else "error",
+        "message": "Database trigger fixed successfully" if success else "Failed to fix database trigger"
+    })
 
