@@ -12,7 +12,7 @@ import psycopg2.extras  # For handling UUID and other types
 from psycopg2.pool import ThreadedConnectionPool  # For connection pooling
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from dotenv import load_dotenv
 import sys
@@ -291,6 +291,9 @@ load_dotenv()
 # Create Flask app first for faster startup
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'fc36290a52f89c1c92655b7d22b198e4')
+
+# Set session to be permanent (30 days)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 # Apply our custom middleware
 app.wsgi_app = RequestLoggerMiddleware(app.wsgi_app)
@@ -984,6 +987,9 @@ def login():
             session['user_type'] = user_type
             session['phone_number'] = phone
             
+            # Make the session permanent so it persists even when browser is closed
+            session.permanent = True
+            
             # Set a flag for RENDER_EMERGENCY_LOGIN to always succeed in Render
             RENDER_EMERGENCY_LOGIN = os.environ.get('RENDER_EMERGENCY_LOGIN', 'false').lower() == 'true'
             
@@ -991,6 +997,9 @@ def login():
             if RENDER_DEPLOYMENT and RENDER_EMERGENCY_LOGIN:
                 logger.info("Using RENDER_EMERGENCY_LOGIN path - bypassing database")
                 flash('Successfully logged in with emergency mode.', 'success')
+                
+                # Make the session permanent
+                session.permanent = True
                 
                 if user_type == 'business':
                     business_id = str(uuid.uuid4())
@@ -1022,6 +1031,9 @@ def login():
                     logger.error(f"Connection test failed: {str(connect_error)}")
                     # If we can't connect quickly, use session fallback data
                     flash('Login successful with limited access mode.', 'success')
+                    
+                    # Make the session permanent
+                    session.permanent = True
                     
                     if user_type == 'business':
                         return redirect(url_for('business_dashboard'))
@@ -1065,6 +1077,9 @@ def login():
                         logger.warning("Query timed out after 10 seconds")
                         flash('Login successful with offline mode.', 'success')
                         
+                        # Make the session permanent
+                        session.permanent = True
+                        
                         if user_type == 'business':
                             return redirect(url_for('business_dashboard'))
                         else:
@@ -1074,10 +1089,11 @@ def login():
                         logger.error(f"Query error: {str(query_error[0])}")
                         flash('Login successful with offline mode.', 'success')
                         
+                        # Make the session permanent
+                        session.permanent = True
+                        
                         if user_type == 'business':
                             return redirect(url_for('business_dashboard'))
-                        else:
-                            return redirect(url_for('customer_dashboard'))
                     
                     # We got a successful query result
                     user = query_result[0]
@@ -1090,6 +1106,9 @@ def login():
                         user_id = user['id']
                         session['user_id'] = user_id
                         session['user_name'] = user.get('name', user_name)
+                        
+                        # Make the session permanent
+                        session.permanent = True
                         
                         # Basic password check
                         if user.get('password') != password:
@@ -1187,6 +1206,9 @@ def login():
             session['user_name'] = 'Emergency User'
             session['user_type'] = emergency_user_type
             session['phone_number'] = request.form.get('phone', '0000000000')
+            
+            # Make the session permanent
+            session.permanent = True
             
             # Add additional required session data
             if emergency_user_type == 'business':
