@@ -531,12 +531,10 @@ def query_table(table_name, query_type='select', fields='*', filters=None, data=
                 if where_conditions:
                     query += " WHERE " + " AND ".join(where_conditions)
             
-            # Apply query limit based on environment
+            # Apply query limit only if explicitly provided
             if limit:
                 query += f" LIMIT {limit}"
-            elif RENDER_DEPLOYMENT:
-                query += f" LIMIT {RENDER_QUERY_LIMIT}"
-                
+            
             # Execute query
             rows = execute_query(query, params)
             
@@ -1289,74 +1287,74 @@ def business_dashboard():
     except Exception as e:
         flash(f'Error loading dashboard: {str(e)}', 'error')
         return redirect(url_for('login'))
-
-    try:
-        # Get business details by user_id
-        business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
-    
-        if business_response and business_response.data:
-            business = business_response.data[0]
-            session['business_id'] = business['id']
-            session['business_name'] = business['name']
+        
+        try:
+            # Get business details by user_id
+            business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
+            
+            if business_response and business_response.data:
+                business = business_response.data[0]
+                session['business_id'] = business['id']
+                session['business_name'] = business['name']
             
             # Only store the access_pin in session if it exists in the database
             if business.get('access_pin'):
                 session['access_pin'] = business['access_pin']
-        else:
-            # Create a new business record
-            try:
-                supabase_url = os.getenv('SUPABASE_URL')
-                supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
-                
-                business_id = str(uuid.uuid4())
-                # Generate a new access_pin only when creating a new business
-                access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                
-                business_data = {
-                    'id': business_id,
-                    'user_id': user_id,
-                    'name': f"{session['user_name']}'s Business",
-                    'description': 'Auto-created business account',
-                    'access_pin': access_pin,
-                    'created_at': datetime.now().isoformat()
-                }
-                
-                # Insert with service role directly
+            else:
+                # Create a new business record
                 try:
-                    # Try using the query_table helper function
-                    query_table('businesses', query_type='insert', data=business_data)
-                except Exception as e:
-                    print(f"ERROR inserting business with query_table: {str(e)}")
-                    # Fallback to direct REST API
-                    try:
-                        headers = {
-                            'apikey': supabase_service_key,
-                            'Authorization': f"Bearer {supabase_service_key}",
-                            'Content-Type': 'application/json'
-                        }
-                        
-                        requests.post(
-                            f"{supabase_url}/rest/v1/businesses",
-                            headers=headers,
-                            json=business_data
-                        )
-                    except Exception as e2:
-                        print(f"ERROR inserting business with direct API: {str(e2)}")
+                    supabase_url = os.getenv('SUPABASE_URL')
+                    supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
                     
-                session['business_id'] = business_id
-                session['business_name'] = business_data['name']
-                session['access_pin'] = access_pin
-                
-                flash('Business profile has been created', 'success')
-            except Exception as e:
-                print(f"ERROR creating business: {str(e)}")
-                # Create a temporary session business to allow user to continue
-                temp_id = str(uuid.uuid4())
-                session['business_id'] = temp_id
-                session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
+                    business_id = str(uuid.uuid4())
+                # Generate a new access_pin only when creating a new business
+                    access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                    
+                    business_data = {
+                        'id': business_id,
+                        'user_id': user_id,
+                        'name': f"{session['user_name']}'s Business",
+                        'description': 'Auto-created business account',
+                        'access_pin': access_pin,
+                        'created_at': datetime.now().isoformat()
+                    }
+                    
+                    # Insert with service role directly
+                    try:
+                        # Try using the query_table helper function
+                        query_table('businesses', query_type='insert', data=business_data)
+                    except Exception as e:
+                        print(f"ERROR inserting business with query_table: {str(e)}")
+                        # Fallback to direct REST API
+                        try:
+                            headers = {
+                                'apikey': supabase_service_key,
+                                'Authorization': f"Bearer {supabase_service_key}",
+                                'Content-Type': 'application/json'
+                            }
+                            
+                            requests.post(
+                                f"{supabase_url}/rest/v1/businesses",
+                                headers=headers,
+                                json=business_data
+                            )
+                        except Exception as e2:
+                            print(f"ERROR inserting business with direct API: {str(e2)}")
+                    
+                    session['business_id'] = business_id
+                    session['business_name'] = business_data['name']
+                    session['access_pin'] = access_pin
+                    
+                    flash('Business profile has been created', 'success')
+                except Exception as e:
+                    print(f"ERROR creating business: {str(e)}")
+                    # Create a temporary session business to allow user to continue
+                    temp_id = str(uuid.uuid4())
+                    session['business_id'] = temp_id
+                    session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
                 # Only generate a new access_pin if one doesn't exist in session
                 if 'access_pin' not in session:
-                    session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+            session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
         
         business_id = safe_uuid(session.get('business_id'))
         
@@ -1470,7 +1468,7 @@ def business_dashboard():
                     customer_response = query_table('customer_credits', 
                                                 fields='customer_id',
                                                 filters=[('business_id', 'eq', business_id)])
-                    if customer_response and customer_response.data:
+                            if customer_response and customer_response.data:
                         total_customers = len(customer_response.data)
                         
                         # Get customer details for the first few customers
@@ -1509,7 +1507,7 @@ def business_dashboard():
                         
                         if transaction_response and transaction_response.data:
                             transactions = transaction_response.data
-                            
+                
                             # Add customer names to transactions
                             for tx in transactions:
                                 try:
@@ -1519,37 +1517,37 @@ def business_dashboard():
                                     
                                     if customer_detail and customer_detail.data:
                                         tx['customer_name'] = customer_detail.data[0].get('name', 'Unknown')
-                                    else:
+                        else:
                                         tx['customer_name'] = 'Unknown'
-                                except Exception as e:
-                                    print(f"ERROR getting customer name: {str(e)}")
+                    except Exception as e:
+                        print(f"ERROR getting customer name: {str(e)}")
                     except Exception as e:
                         print(f"ERROR getting transactions: {str(e)}")
-                    
-                    try:
+                
+                try:
                         # Total credit given
-                        credit_response = query_table('transactions', fields='amount',
-                                                    filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
-                        total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
-                    except Exception as e:
-                        print(f"ERROR getting credit total: {str(e)}")
-                    
-                    try:
-                        # Total payments
+                    credit_response = query_table('transactions', fields='amount', 
+                                                filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
+                    total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
+                except Exception as e:
+                    print(f"ERROR getting credit total: {str(e)}")
+                
+                try:
+                    # Total payments
                         payment_response = query_table('customer_credits', fields='current_balance',
                                                     filters=[('business_id', 'eq', business_id)])
                         total_payments = sum([float(t.get('current_balance', 0)) for t in payment_response.data if float(t.get('current_balance', 0)) > 0]) if payment_response and payment_response.data else 0
-                    except Exception as e:
-                        print(f"ERROR getting payment total: {str(e)}")
-                    
                 except Exception as e:
-                    print(f"ERROR in data loading: {str(e)}")
-                    # Don't create mock data, just leave empty lists
-                    total_customers = 0
-                    total_credit = 0
-                    total_payments = 0
-                    transactions = []
-                    customers = []
+                    print(f"ERROR getting payment total: {str(e)}")
+                
+            except Exception as e:
+                print(f"ERROR in data loading: {str(e)}")
+                # Don't create mock data, just leave empty lists
+                total_customers = 0
+                total_credit = 0
+                total_payments = 0
+                transactions = []
+                customers = []
             
             # Generate QR code (placeholder on Render) 
             try:
@@ -1587,8 +1585,8 @@ def business_dashboard():
             return render_template('business/dashboard.html', 
                               business=business, 
                               summary=summary, 
-                              transactions=[],
-                              customers=[])
+                                transactions=[],
+                                customers=[])
                               
     except Exception as e:
         flash(f'Error loading dashboard: {str(e)}', 'error')
@@ -1867,7 +1865,7 @@ def business_transactions(customer_id):
             print(f"Error checking or creating user: {str(e)}")
             traceback.print_exc()
             # Continue with transaction creation - the query_table function will handle any errors
-            
+        
         # Use the enhanced transaction function with media support
         transaction_data = {
             'id': str(uuid.uuid4()),
@@ -1895,7 +1893,7 @@ def business_transactions(customer_id):
             transaction_result = execute_query(query, values, fetch_one=True, commit=True)
             
             if transaction_result:
-                flash('Transaction added successfully', 'success')
+        flash('Transaction added successfully', 'success')
             else:
                 flash('Failed to add transaction. Please try again.', 'error')
         except Exception as e:
