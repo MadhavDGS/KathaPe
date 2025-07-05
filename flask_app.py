@@ -1494,8 +1494,10 @@ def business_dashboard():
                                     
                                     if customer_detail and customer_detail.data:
                                         tx['customer_name'] = customer_detail.data[0].get('name', 'Unknown')
-                        else:
-                                        tx['customer_name'] = 'Unknown'
+                                except Exception as e:
+                                    print(f"ERROR getting customer name: {str(e)}")
+                                if 'customer_name' not in tx:
+                                    tx['customer_name'] = 'Unknown'
                     except Exception as e:
                         print(f"ERROR getting customer name: {str(e)}")
                     except Exception as e:
