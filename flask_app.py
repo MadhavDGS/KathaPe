@@ -1450,13 +1450,11 @@ def business_dashboard():
                     customer_response = query_table('customer_credits', 
                                                 fields='customer_id',
                                                 filters=[('business_id', 'eq', business_id)])
-                            if customer_response and customer_response.data:
+                    if customer_response and customer_response.data:
                         total_customers = len(customer_response.data)
-                        
                         # Get customer details for the first few customers
                         if total_customers > 0:
                             customer_ids = [c['customer_id'] for c in customer_response.data[:5]]
-                            
                             for customer_id in customer_ids:
                                 try:
                                     # Get customer details
@@ -1464,18 +1462,15 @@ def business_dashboard():
                                                             filters=[('id', 'eq', customer_id)])
                                     if customer_detail and customer_detail.data:
                                         customer = customer_detail.data[0]
-                                        
                                         # Get current balance
                                         credit_detail = query_table('customer_credits', 
                                                             filters=[('business_id', 'eq', business_id),
                                                                     ('customer_id', 'eq', customer_id)])
-                                        
                                         if credit_detail and credit_detail.data:
                                             credit = credit_detail.data[0]
                                             customer['current_balance'] = float(credit.get('current_balance', 0))
                                         else:
                                             customer['current_balance'] = 0
-                                        
                                         customers.append(customer)
                                 except Exception as e:
                                     print(f"ERROR getting customer details: {str(e)}")
