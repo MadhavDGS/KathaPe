@@ -1284,19 +1284,12 @@ def logout():
 def business_dashboard():
     try:
         user_id = safe_uuid(session.get('user_id'))
-    except Exception as e:
-        flash(f'Error loading dashboard: {str(e)}', 'error')
-        return redirect(url_for('login'))
-        
-        try:
-            # Get business details by user_id
-            business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
-            
-            if business_response and business_response.data:
-                business = business_response.data[0]
-                session['business_id'] = business['id']
-                session['business_name'] = business['name']
-            
+        # Get business details by user_id
+        business_response = query_table('businesses', filters=[('user_id', 'eq', user_id)])
+        if business_response and business_response.data:
+            business = business_response.data[0]
+            session['business_id'] = business['id']
+            session['business_name'] = business['name']
             # Only store the access_pin in session if it exists in the database
             if business.get('access_pin'):
                 session['access_pin'] = business['access_pin']
@@ -1305,11 +1298,8 @@ def business_dashboard():
                 try:
                     supabase_url = os.getenv('SUPABASE_URL')
                     supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY')
-                    
                     business_id = str(uuid.uuid4())
-                # Generate a new access_pin only when creating a new business
                     access_pin = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                    
                     business_data = {
                         'id': business_id,
                         'user_id': user_id,
@@ -1318,21 +1308,16 @@ def business_dashboard():
                         'access_pin': access_pin,
                         'created_at': datetime.now().isoformat()
                     }
-                    
-                    # Insert with service role directly
                     try:
-                        # Try using the query_table helper function
                         query_table('businesses', query_type='insert', data=business_data)
                     except Exception as e:
                         print(f"ERROR inserting business with query_table: {str(e)}")
-                        # Fallback to direct REST API
                         try:
                             headers = {
                                 'apikey': supabase_service_key,
                                 'Authorization': f"Bearer {supabase_service_key}",
                                 'Content-Type': 'application/json'
                             }
-                            
                             requests.post(
                                 f"{supabase_url}/rest/v1/businesses",
                                 headers=headers,
@@ -1340,23 +1325,19 @@ def business_dashboard():
                             )
                         except Exception as e2:
                             print(f"ERROR inserting business with direct API: {str(e2)}")
-                    
                     session['business_id'] = business_id
                     session['business_name'] = business_data['name']
                     session['access_pin'] = access_pin
-                    
                     flash('Business profile has been created', 'success')
                 except Exception as e:
                     print(f"ERROR creating business: {str(e)}")
-                    # Create a temporary session business to allow user to continue
                     temp_id = str(uuid.uuid4())
                     session['business_id'] = temp_id
                     session['business_name'] = f"{session.get('user_name', 'Your')}'s Business"
-                # Only generate a new access_pin if one doesn't exist in session
                 if 'access_pin' not in session:
                     session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
-                business_id = safe_uuid(session.get('business_id'))
-        
+        if 'business_id' not in session:
+            session['business_id'] = str(uuid.uuid4())
         business_id = safe_uuid(session.get('business_id'))
         
         try:
