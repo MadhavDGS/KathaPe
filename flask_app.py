@@ -1500,8 +1500,6 @@ def business_dashboard():
                                     tx['customer_name'] = 'Unknown'
                     except Exception as e:
                         print(f"ERROR getting customer name: {str(e)}")
-                    except Exception as e:
-                        print(f"ERROR getting transactions: {str(e)}")
                 
                 try:
                         # Total credit given
