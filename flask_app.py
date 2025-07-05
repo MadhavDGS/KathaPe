@@ -1355,6 +1355,7 @@ def business_dashboard():
                 # Only generate a new access_pin if one doesn't exist in session
                 if 'access_pin' not in session:
                     session['access_pin'] = f"{int(datetime.now().timestamp()) % 10000:04d}"
+                business_id = safe_uuid(session.get('business_id'))
         
         business_id = safe_uuid(session.get('business_id'))
         
