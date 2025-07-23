@@ -1501,21 +1501,34 @@ def business_dashboard():
                     except Exception as e:
                         print(f"ERROR getting customer name: {str(e)}")
                 
+                except Exception as e:
+                    print(f"ERROR in query_table fallback: {str(e)}")
+                    # Set default values if query_table fails too
+                    total_customers = 0
+                    transactions = []
+                    customers = []
+                
+                # Initialize variables
+                total_credit = 0
+                total_payments = 0
+                
                 try:
-                        # Total credit given
+                    # Total credit given
                     credit_response = query_table('transactions', fields='amount', 
                                                 filters=[('business_id', 'eq', business_id), ('transaction_type', 'eq', 'credit')])
                     total_credit = sum([float(t.get('amount', 0)) for t in credit_response.data]) if credit_response and credit_response.data else 0
                 except Exception as e:
                     print(f"ERROR getting credit total: {str(e)}")
+                    total_credit = 0
                 
                 try:
                     # Total payments
-                        payment_response = query_table('customer_credits', fields='current_balance',
+                    payment_response = query_table('customer_credits', fields='current_balance',
                                                     filters=[('business_id', 'eq', business_id)])
-                        total_payments = sum([float(t.get('current_balance', 0)) for t in payment_response.data if float(t.get('current_balance', 0)) > 0]) if payment_response and payment_response.data else 0
+                    total_payments = sum([float(t.get('current_balance', 0)) for t in payment_response.data if float(t.get('current_balance', 0)) > 0]) if payment_response and payment_response.data else 0
                 except Exception as e:
                     print(f"ERROR getting payment total: {str(e)}")
+                    total_payments = 0
                 
             except Exception as e:
                 print(f"ERROR in data loading: {str(e)}")
@@ -1870,7 +1883,7 @@ def business_transactions(customer_id):
             transaction_result = execute_query(query, values, fetch_one=True, commit=True)
             
             if transaction_result:
-        flash('Transaction added successfully', 'success')
+                flash('Transaction added successfully', 'success')
             else:
                 flash('Failed to add transaction. Please try again.', 'error')
         except Exception as e:
